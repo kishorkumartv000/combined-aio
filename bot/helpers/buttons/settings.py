@@ -1,7 +1,7 @@
 import bot.helpers.translations as lang
-
 from bot.settings import bot_set
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from config import Config
 
 main_button = [[InlineKeyboardButton(text=lang.s.MAIN_MENU_BUTTON, callback_data="main_menu")]]
 close_button = [[InlineKeyboardButton(text=lang.s.CLOSE_BUTTON, callback_data="close")]]
@@ -32,36 +32,28 @@ def main_menu():
 
 def providers_button():
     inline_keyboard = []
+    
+    # Always show Apple Music button
+    inline_keyboard.append([
+        InlineKeyboardButton("🍎 Apple Music", callback_data="appleP")
+    ])
+    
+    # Conditionally show other providers
     if bot_set.qobuz:
-        inline_keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text=lang.s.QOBUZ,
-                    callback_data='qbP'
-                )
-            ]
-        )
+        inline_keyboard.append([
+            InlineKeyboardButton(lang.s.QOBUZ, callback_data="qbP")
+        ])
     if bot_set.deezer:
-        inline_keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text=lang.s.DEEZER,
-                    callback_data='dzP'
-                )
-            ]
-        )
+        inline_keyboard.append([
+            InlineKeyboardButton(lang.s.DEEZER, callback_data="dzP")
+        ])
     if bot_set.can_enable_tidal:
-        inline_keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text=lang.s.TIDAL,
-                    callback_data='tdP'
-                )
-            ]
-        )
+        inline_keyboard.append([
+            InlineKeyboardButton(lang.s.TIDAL, callback_data="tdP")
+        ])
+    
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
-
 
 def tg_button():
     inline_keyboard = [
@@ -87,7 +79,6 @@ def tg_button():
 
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
-
 
 def core_buttons():
     inline_keyboard = []
@@ -153,8 +144,6 @@ def core_buttons():
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
 
-
-
 def language_buttons(languages, selected):
     inline_keyboard = []
     for item in languages:
@@ -167,11 +156,20 @@ def language_buttons(languages, selected):
                 )
             ]
         )
-    inline_keyboard += main_button+ close_button
+    inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
 
+# Apple Music specific buttons
+def apple_button(formats):
+    """Create buttons for Apple Music settings"""
+    buttons = []
+    for fmt, label in formats.items():
+        buttons.append([InlineKeyboardButton(label, callback_data=f"appleF_{fmt}")])
+    buttons.append([InlineKeyboardButton("Quality Settings", callback_data="appleQ")])
+    buttons.append([InlineKeyboardButton("🔙 Back", callback_data="providerPanel")])
+    return InlineKeyboardMarkup(buttons)
 
-# tidal panel
+# Tidal panel
 def tidal_buttons():
     inline_keyboard = [
         [
@@ -223,10 +221,8 @@ def tidal_auth_buttons():
         )
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
-    
 
-
-# qobuz qualities
+# Qobuz qualities
 def qb_button(qualities:dict):
     inline_keyboard = []
     for quality in qualities.values():
