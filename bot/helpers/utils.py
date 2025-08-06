@@ -6,6 +6,9 @@ import shutil
 import zipfile
 import re
 import subprocess
+import json
+import base64
+import time
 import mutagen
 from mutagen.mp4 import MP4
 from pathlib import Path
@@ -332,9 +335,13 @@ async def progress_message(done, total, details):
         total: total number of tasks
         details: Message, text (dict)
     """
+    # Calculate progress bar
+    filled = math.floor((done / total) * 10)
+    empty = 10 - filled
+    
     progress_bar = "{0}{1}".format(
-        ''.join(["▰" for i in range(math.floor((done/total) * 10))),
-        ''.join(["▱" for i in range(10 - math.floor((done/total) * 10))])
+        ''.join(["▰" for _ in range(filled)]),
+        ''.join(["▱" for _ in range(empty)])
     )
 
     try:
@@ -351,10 +358,10 @@ async def progress_message(done, total, details):
             False
         )
     except FloodWait as e:
-        pass # dont update the message if flooded
+        pass # don't update the message if flooded
 
 
-async def cleanup(user=None, metadata=None, ):
+async def cleanup(user=None, metadata=None):
     """
     Clean up after task completed - For concurrent downloads
     Clean up after upload - For single download
