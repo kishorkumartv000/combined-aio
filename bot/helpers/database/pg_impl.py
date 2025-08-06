@@ -2,39 +2,9 @@ import psycopg2
 import datetime
 import psycopg2.extras
 from .pg_db import DataBaseHandle
-
 from config import Config
 
-#special_characters = ['!','#','$','%', '&','@','[',']',' ',']','_', ',', '.', ':', ';', '<', '>', '?', '\\', '^', '`', '{', '|', '}', '~']
-
-"""
-SETTINGS VARS
-
-AUTH_CHATS - Chats where bot is allowed (str)
-AUTH_USERS - Users who can use bot (str)
-UPLOAD_MODE - RCLONE|Telegram|Local (str)
-ANTI_SPAM - OFF|CHAT+|USER (str)
-BOT_PUBLIC - True|False (bool)
-BOT_LANGUAGE - (str) ISO 639-1 Codes Only
-ART_POSTER - True|False (bool)
-RCLONE_LINK_OPTIONS - False|RCLONE|Index|Both (str)
-PLAYLIST_SORT - (bool)
-ARTIST_BATCH_UPLOAD - (bool)
-PLAYLIST_CONCURRENT - (bool)
-PLAYLIST_LINK_DISABLE - Disable links for sorted playlist (bool)
-ALBUM_ZIP
-PLAYLIST_ZIP
-ARTIST_ZIP
-
-QOBUZ_QUALITY - (int)
-
-TIDAL_AUTH_DATA - (blob) Tidal session saved
-TIDAL_QUALITY - (str)
-TIDAL_SPATIAL - (str)
-"""
-
 class BotSettings(DataBaseHandle):
-
     def __init__(self, dburl=None):
         if dburl is None:
             dburl = Config.DATABASE_URL
@@ -119,5 +89,51 @@ class BotSettings(DataBaseHandle):
     def __del__(self):
         super().__del__()
 
+class DownloadHistory(DataBaseHandle):
+    def __init__(self, dburl=None):
+        if dburl is None:
+            dburl = Config.DATABASE_URL
+        super().__init__(dburl)
+        
+        # Create download history table
+        schema = """
+        CREATE TABLE IF NOT EXISTS download_history (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            provider VARCHAR(20) NOT NULL,
+            content_type VARCHAR(10) NOT NULL,
+            content_id VARCHAR(50) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            artist VARCHAR(255) NOT NULL,
+            quality VARCHAR(20),
+            download_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_downloads ON download_history(user_id);
+        """
+        cur = self.scur()
+        cur.execute(schema)
+        self._conn.commit()
+        self.ccur(cur)
+    
+    def record_download(self, user_id, provider, content_type, content_id, title, artist, quality):
+        sql = """
+        INSERT INTO download_history 
+        (user_id, provider, content_type, content_id, title, artist, quality) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """
+        cur = self.scur()
+        cur.execute(sql, (user_id, provider, content_type, content_id, title, artist, quality))
+        self._conn.commit()
+        self.ccur(cur)
+    
+    def get_user_history(self, user_id, limit=10):
+        sql = "SELECT * FROM download_history WHERE user_id = %s ORDER BY download_time DESC LIMIT %s"
+        cur = self.scur(dictcur=True)
+        cur.execute(sql, (user_id, limit))
+        results = cur.fetchall()
+        self.ccur(cur)
+        return results
 
+# Initialize database handlers
 set_db = BotSettings()
+download_history = DownloadHistory()
