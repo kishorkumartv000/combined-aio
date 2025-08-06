@@ -79,6 +79,22 @@ async def album_upload(metadata, user):
     # Cleanup
     shutil.rmtree(metadata['folderpath'])
 
+async def artist_upload(metadata, user):
+    """Placeholder for artist upload functionality"""
+    await send_message(
+        user,
+        f"🎤 Artist download would process: {metadata['title']}",
+        'text'
+    )
+
+async def playlist_upload(metadata, user):
+    """Placeholder for playlist upload functionality"""
+    await send_message(
+        user,
+        f"🎵 Playlist download would process: {metadata['title']}",
+        'text'
+    )
+
 async def rclone_upload(user, path):
     """Rclone upload implementation would go here"""
     return "rclone_link", "index_link"
