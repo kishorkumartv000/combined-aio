@@ -1,6 +1,6 @@
-# In bot/modules/history.py
+# bot/modules/history.py
 from pyrogram import filters
-from bot import aio
+from bot.tgclient import aio  # FIXED IMPORT
 from bot.helpers.database.pg_impl import download_history
 from bot.helpers.message import send_message
 
