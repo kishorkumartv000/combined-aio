@@ -7,7 +7,8 @@ from pathvalidate import sanitize_filepath
 from ..utils import *
 from ..metadata import set_metadata
 
-from ..uploder import track_upload, album_upload, artist_upload, playlist_upload
+# FIXED IMPORT: Changed from ..uploder to ..uploader
+from ..uploader import track_upload, album_upload, artist_upload, playlist_upload
 
 
 async def start_qobuz(url:str, user:dict):
