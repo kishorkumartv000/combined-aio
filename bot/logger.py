@@ -7,7 +7,6 @@ log_file_path = "./bot/bot_logs.log"
 class Logger:
 
     def __init__(self):
-        # Config file has logging so removing that handler 
         try:
             logging.getLogger().removeHandler(logging.getLogger().handlers[0])
         except:
@@ -46,7 +45,6 @@ class Logger:
         caller_filename = os.path.basename(caller_frame.f_globals['__file__'])
         self.logger.debug(f'{caller_filename} - {message}')
 
-    # Debug itself with no info
     def info(self, message):
         self.logger.info(message)
 
