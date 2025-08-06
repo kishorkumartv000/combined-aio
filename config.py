@@ -25,6 +25,9 @@ class Config:
     WORK_DIR = getenv("WORK_DIR", "./bot/")
     DOWNLOADS_FOLDER = getenv("DOWNLOADS_FOLDER", "DOWNLOADS")
     LOCAL_STORAGE = getenv("LOCAL_STORAGE", WORK_DIR + DOWNLOADS_FOLDER)
+    
+    # Add this new configuration for download base directory
+    DOWNLOAD_BASE_DIR = getenv("DOWNLOAD_BASE_DIR", LOCAL_STORAGE)
 
     # File/Folder Naming
     PLAYLIST_NAME_FORMAT = getenv("PLAYLIST_NAME_FORMAT", "{title} - Playlist")
