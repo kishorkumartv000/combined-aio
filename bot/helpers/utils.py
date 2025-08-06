@@ -4,11 +4,13 @@ import aiohttp
 import asyncio
 import shutil
 import zipfile
-
+import re
+import subprocess
+import mutagen
+from mutagen.mp4 import MP4
 from pathlib import Path
 from urllib.parse import quote
 from aiohttp import ClientTimeout
-from pyrogram.errors import MessageNotModified
 from concurrent.futures import ThreadPoolExecutor
 from pyrogram.errors import FloodWait
 
@@ -19,7 +21,6 @@ from ..logger import LOGGER
 from ..settings import bot_set
 from .buttons.links import links_button
 from .message import send_message, edit_message
-
 
 MAX_SIZE = 1.9 * 1024 * 1024 * 1024  # 2GB
 # download folder structure : BASE_DOWNLOAD_DIR + message_r_id
@@ -42,25 +43,17 @@ async def download_file(url, path, retries=3, timeout=30):
                 async with session.get(url) as response:
                     if response.status == 200:
                         with open(path, 'wb') as f:
-                            while True:
-                                chunk = await response.content.read(1024 * 4)
-                                if not chunk:
-                                    break
+                            async for chunk in response.content.iter_chunked(1024 * 4):
                                 f.write(chunk)
                         return None
                     else:
                         return f"HTTP Status: {response.status}"
-        except aiohttp.ClientError as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             if attempt == retries:
-                return f"Connection failed after {retries} attempts: {str(e)}"
-            await asyncio.sleep(2 ** attempt)  # Exponential backoff
-        except asyncio.TimeoutError:
-            if attempt == retries:
-                return "Download failed due to timeout."
+                return f"Failed after {retries} attempts: {str(e)}"
             await asyncio.sleep(2 ** attempt)
         except Exception as e:
-            return e
-
+            return f"Unexpected error: {str(e)}"
 
 
 async def format_string(text:str, data:dict, user=None):
@@ -72,29 +65,35 @@ async def format_string(text:str, data:dict, user=None):
     Returns:
         str
     """
-    text = text.replace(R'{title}', data['title'])
-    text = text.replace(R'{album}', data['album'])
-    text = text.replace(R'{artist}', data['artist'])
-    text = text.replace(R'{albumartist}', data['albumartist'])
-    text = text.replace(R'{tracknumber}', str(data['tracknumber']))
-    text = text.replace(R'{date}', str(data['date']))
-    text = text.replace(R'{upc}', str(data['upc']))
-    text = text.replace(R'{isrc}', str(data['isrc']))
-    text = text.replace(R'{totaltracks}', str(data['totaltracks']))
-    text = text.replace(R'{volume}', str(data['volume']))
-    text = text.replace(R'{totalvolume}', str(data['totalvolume']))
-    text = text.replace(R'{extension}', data['extension'])
-    text = text.replace(R'{duration}', str(data['duration']))
-    text = text.replace(R'{copyright}', data['copyright'])
-    text = text.replace(R'{genre}', data['genre'])
-    text = text.replace(R'{provider}', data['provider'].title())
-    text = text.replace(R'{quality}', data['quality'])
-    text = text.replace(R'{explicit}', str(data['explicit']))
+    replacements = {
+        '{title}': data.get('title', ''),
+        '{album}': data.get('album', ''),
+        '{artist}': data.get('artist', ''),
+        '{albumartist}': data.get('albumartist', ''),
+        '{tracknumber}': str(data.get('tracknumber', '')),
+        '{date}': str(data.get('date', '')),
+        '{upc}': str(data.get('upc', '')),
+        '{isrc}': str(data.get('isrc', '')),
+        '{totaltracks}': str(data.get('totaltracks', '')),
+        '{volume}': str(data.get('volume', '')),
+        '{totalvolume}': str(data.get('totalvolume', '')),
+        '{extension}': data.get('extension', ''),
+        '{duration}': str(data.get('duration', '')),
+        '{copyright}': data.get('copyright', ''),
+        '{genre}': data.get('genre', ''),
+        '{provider}': data.get('provider', '').title(),
+        '{quality}': data.get('quality', ''),
+        '{explicit}': str(data.get('explicit', '')),
+    }
+    
     if user:
-        text = text.replace(R'{user}', user['name'])
-        text = text.replace(R'{username}', user['user_name'])
+        replacements['{user}'] = user.get('name', '')
+        replacements['{username}'] = user.get('user_name', '')
+    
+    for key, value in replacements.items():
+        text = text.replace(key, value)
+        
     return text
-
 
 
 async def run_concurrent_tasks(tasks, progress_details=None):
@@ -104,17 +103,26 @@ async def run_concurrent_tasks(tasks, progress_details=None):
         progress_details: details for progress message (dict)    
     """
     semaphore = asyncio.Semaphore(Config.MAX_WORKERS)
-
-    i = [0]
-    l = len(tasks)
-    async def sem_task(task):
+    completed = 0
+    total = len(tasks)
+    
+    async def run_task(task):
+        nonlocal completed
         async with semaphore:
             result = await task
-            if progress_details and result:
-                i[0]+=1 # currently done
-                await progress_message(i[0], l, progress_details)
-
-    await asyncio.gather(*(sem_task(task) for task in tasks))
+            completed += 1
+            if progress_details:
+                progress = int((completed / total) * 100)
+                try:
+                    await edit_message(
+                        progress_details['msg'],
+                        f"{progress_details['text']}\nProgress: {progress}%"
+                    )
+                except FloodWait:
+                    pass
+            return result
+            
+    return await asyncio.gather(*(run_task(task) for task in tasks))
 
 
 async def create_link(path, basepath):
@@ -325,7 +333,7 @@ async def progress_message(done, total, details):
         details: Message, text (dict)
     """
     progress_bar = "{0}{1}".format(
-        ''.join(["▰" for i in range(math.floor((done/total) * 10))]),
+        ''.join(["▰" for i in range(math.floor((done/total) * 10))),
         ''.join(["▱" for i in range(10 - math.floor((done/total) * 10))])
     )
 
@@ -384,3 +392,104 @@ async def cleanup(user=None, metadata=None, ):
             shutil.rmtree(f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}-temp/")
         except Exception as e:
             LOGGER.info(e)
+
+# Apple Music specific utilities
+async def run_apple_downloader(url: str, output_dir: str, options: list = None) -> dict:
+    """
+    Execute Apple Music downloader script with customizable options
+    
+    Args:
+        url: Apple Music URL to download
+        output_dir: Directory to save downloaded files
+        options: List of additional command-line options
+        
+    Returns:
+        dict: {'success': bool, 'error': str if failed}
+    """
+    cmd = [Config.DOWNLOADER_PATH]
+    
+    # Add options if provided
+    if options:
+        cmd.extend(options)
+    
+    # Add URL
+    cmd.append(url)
+    
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        cwd=output_dir,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    
+    stdout, stderr = await process.communicate()
+    
+    if process.returncode != 0:
+        error = stderr.decode().strip() or stdout.decode().strip()
+        return {'success': False, 'error': error}
+    
+    return {'success': True}
+
+
+async def extract_apple_metadata(file_path: str) -> dict:
+    try:
+        if file_path.endswith('.m4a'):
+            audio = MP4(file_path)
+            return {
+                'title': audio.get('\xa9nam', ['Unknown'])[0],
+                'artist': audio.get('\xa9ART', ['Unknown Artist'])[0],
+                'album': audio.get('\xa9alb', ['Unknown Album'])[0],
+                'duration': int(audio.info.length),
+                'thumbnail': extract_cover_art(audio, file_path)
+            }
+        else:
+            audio = mutagen.File(file_path)
+            return {
+                'title': audio.get('title', ['Unknown'])[0],
+                'artist': audio.get('artist', ['Unknown Artist'])[0],
+                'album': audio.get('album', ['Unknown Album'])[0],
+                'duration': int(audio.info.length),
+                'thumbnail': None
+            }
+    except Exception as e:
+        LOGGER.error(f"Metadata extraction failed: {str(e)}")
+        return default_metadata(file_path)
+
+
+def extract_cover_art(audio, file_path):
+    """Extract cover art from audio file"""
+    if 'covr' in audio:
+        cover_data = audio['covr'][0]
+        cover_path = f"{os.path.splitext(file_path)[0]}.jpg"
+        try:
+            with open(cover_path, 'wb') as f:
+                f.write(cover_data)
+            return cover_path
+        except Exception as e:
+            LOGGER.error(f"Failed to save cover art: {str(e)}")
+    return None
+
+
+def default_metadata(file_path):
+    """Return default metadata when extraction fails"""
+    return {
+        'title': os.path.splitext(os.path.basename(file_path))[0],
+        'artist': 'Unknown Artist',
+        'album': 'Unknown Album',
+        'duration': 0,
+        'thumbnail': None
+    }
+
+
+async def create_apple_zip(directory: str, user_id: int) -> str:
+    """Create zip file for Apple Music downloads"""
+    zip_path = os.path.join(Config.LOCAL_STORAGE, f"apple_{user_id}.zip")
+    
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, _, files in os.walk(directory):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, directory)
+                zipf.write(file_path, arcname)
+    
+    return zip_path
