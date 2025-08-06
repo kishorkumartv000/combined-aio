@@ -4,26 +4,14 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 def links_button(rclone, index):
     inline_keyboard = []
-
     if rclone:
-        inline_keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text=lang.s.RCLONE_LINK,
-                    url=rclone
-                )
-            ]
-        )
-
+        inline_keyboard.append([
+            InlineKeyboardButton(lang.s.RCLONE_LINK, url=rclone)
+        ])
     if index:
-        inline_keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text=lang.s.INDEX_LINK,
-                    url=index
-                )
-            ]
-        )
-    if inline_keyboard == []:
+        inline_keyboard.append([
+            InlineKeyboardButton(lang.s.INDEX_LINK, url=index)
+        ])
+    if not inline_keyboard:
         return None
     return InlineKeyboardMarkup(inline_keyboard)
