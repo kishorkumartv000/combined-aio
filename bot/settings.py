@@ -38,7 +38,8 @@ class BotSettings:
     def __init__(self):
         self.deezer = False
         self.qobuz = False
-        self.tidal = None
+        # Add this line to initialize can_enable_tidal
+        self.can_enable_tidal = Config.ENABLE_TIDAL and Config.ENABLE_TIDAL.lower() == "true"
         self.admins = Config.ADMINS
         self.apple = None  # Apple Music settings placeholder
 
@@ -152,7 +153,7 @@ class BotSettings:
 
     async def login_tidal(self):
         """Initialize Tidal client"""
-        if not Config.ENABLE_TIDAL:
+        if not self.can_enable_tidal:
             return
 
         data = None
