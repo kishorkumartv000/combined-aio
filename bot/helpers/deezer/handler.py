@@ -5,7 +5,7 @@ from .metadata import *
 from .dzapi import deezerapi
 
 from ..utils import *
-from ..uploder import *
+from ..uploader import *
 from ..metadata import set_metadata, get_audio_extension
 
 from ...settings import bot_set
