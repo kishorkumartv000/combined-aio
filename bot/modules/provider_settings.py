@@ -1,7 +1,7 @@
 import bot.helpers.translations as lang
 
 from pyrogram import Client, filters
-from pyrogram.types import CallbackQuery, Message
+from pyrogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
 
@@ -12,24 +12,120 @@ from ..helpers.tidal.tidal_api import tidalapi
 from ..helpers.message import edit_message, check_user
 
 
-
 @Client.on_callback_query(filters.regex(pattern=r"^providerPanel"))
-async def provider_cb(c, cb:CallbackQuery):
+async def provider_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
+        buttons = []
+        # Always show Apple Music button
+        buttons.append([
+            InlineKeyboardButton("🍎 Apple Music", callback_data="appleP")
+        ])
+        
+        # Conditionally show other providers
+        if bot_set.qobuz:
+            buttons.append([
+                InlineKeyboardButton(lang.s.QOBUZ, callback_data="qbP")
+            ])
+        if bot_set.deezer:
+            buttons.append([
+                InlineKeyboardButton(lang.s.DEEZER, callback_data="dzP")
+            ])
+        if bot_set.can_enable_tidal:
+            buttons.append([
+                InlineKeyboardButton(lang.s.TIDAL, callback_data="tdP")
+            ])
+            
+        buttons += [
+            [InlineKeyboardButton(lang.s.MAIN_MENU_BUTTON, callback_data="main_menu")],
+            [InlineKeyboardButton(lang.s.CLOSE_BUTTON, callback_data="close")]
+        ]
+        
         await edit_message(
             cb.message,
             lang.s.PROVIDERS_PANEL,
-            providers_button()
+            InlineKeyboardMarkup(buttons)
         )
+
+
+#----------------
+# APPLE MUSIC
+#----------------
+@Client.on_callback_query(filters.regex(pattern=r"^appleP"))
+async def apple_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        formats = {
+            'alac': 'ALAC',
+            'atmos': 'Dolby Atmos'
+        }
+        current = Config.APPLE_DEFAULT_FORMAT
+        formats[current] += ' ✅'
+        
+        await edit_message(
+            cb.message,
+            "🍎 **Apple Music Settings**\n\n"
+            "**Available Formats:**\n"
+            "- ALAC: Apple Lossless Audio Codec\n"
+            "- Dolby Atmos: Spatial audio experience\n\n"
+            "**Current Default Format:**",
+            apple_button(formats)
+        )
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^appleF"))
+async def apple_format_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        format_type = cb.data.split('_')[1]
+        # Update configuration
+        set_db.set_variable('APPLE_DEFAULT_FORMAT', format_type)
+        Config.APPLE_DEFAULT_FORMAT = format_type
+        await apple_cb(c, cb)
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^appleQ"))
+async def apple_quality_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        qualities = {
+            'alac': ['192000', '256000', '320000'],
+            'atmos': ['2768', '3072', '3456']
+        }
+        current_format = Config.APPLE_DEFAULT_FORMAT
+        current_quality = getattr(Config, f'APPLE_{current_format.upper()}_QUALITY')
+        
+        # Create quality buttons
+        buttons = []
+        for quality in qualities[current_format]:
+            label = f"{quality} kbps"
+            if quality == current_quality:
+                label += " ✅"
+            buttons.append([InlineKeyboardButton(label, callback_data=f"appleSQ_{current_format}_{quality}")])
+        
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="appleP")])
+        
+        await edit_message(
+            cb.message,
+            f"⚙️ **{current_format.upper()} Quality Settings**\n\n"
+            "Select the maximum quality for downloads:",
+            InlineKeyboardMarkup(buttons)
+        )
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^appleSQ"))
+async def apple_set_quality_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        _, format_type, quality = cb.data.split('_')
+        # Update configuration
+        set_db.set_variable(f'APPLE_{format_type.upper()}_QUALITY', quality)
+        setattr(Config, f'APPLE_{format_type.upper()}_QUALITY', quality)
+        await apple_quality_cb(c, cb)
 
 
 #----------------
 # QOBUZ
 #----------------
 @Client.on_callback_query(filters.regex(pattern=r"^qbP"))
-async def qobuz_cb(c, cb:CallbackQuery):
+async def qobuz_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
-        quality = {5:'MP3 320', 6:'Lossless', 7:'24B<=96KHZ',27:'24B>96KHZ'}
+        quality = {5: 'MP3 320', 6: 'Lossless', 7: '24B<=96KHZ', 27: '24B>96KHZ'}
         current = bot_set.qobuz.quality
         quality[current] = quality[current] + '✅'
         try:
@@ -38,12 +134,14 @@ async def qobuz_cb(c, cb:CallbackQuery):
                 lang.s.QOBUZ_QUALITY_PANEL,
                 markup=qb_button(quality)
             )
-        except:pass
+        except:
+            pass
+
 
 @Client.on_callback_query(filters.regex(pattern=r"^qbQ"))
-async def qobuz_quality_cb(c, cb:CallbackQuery):
+async def qobuz_quality_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
-        qobuz = {5:'MP3 320', 6:'Lossless', 7:'24B<=96KHZ',27:'24B>96KHZ'}
+        qobuz = {5: 'MP3 320', 6: 'Lossless', 7: '24B<=96KHZ', 27: '24B>96KHZ'}
         to_set = cb.data.split('_')[1]
         bot_set.qobuz.quality = list(filter(lambda x: qobuz[x] == to_set, qobuz))[0]
         set_db.set_variable('QOBUZ_QUALITY', bot_set.qobuz.quality)
@@ -54,17 +152,17 @@ async def qobuz_quality_cb(c, cb:CallbackQuery):
 # TIDAL
 #----------------
 @Client.on_callback_query(filters.regex(pattern=r"^tdP"))
-async def tidal_cb(c, cb:CallbackQuery):
+async def tidal_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         await edit_message(
             cb.message,
             lang.s.TIDAL_PANEL,
-            tidal_buttons() # auth and quality button (quality button only if auth already done)
+            tidal_buttons()  # auth and quality button (quality button only if auth already done)
         )
-    
+
 
 @Client.on_callback_query(filters.regex(pattern=r"^tdQ"))
-async def tidal_quality_cb(c, cb:CallbackQuery):
+async def tidal_quality_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         qualities = {
             'LOW': 'LOW',
@@ -83,12 +181,12 @@ async def tidal_quality_cb(c, cb:CallbackQuery):
 
 
 @Client.on_callback_query(filters.regex(pattern=r"^tdSQ"))
-async def tidal_set_quality_cb(c, cb:CallbackQuery):
+async def tidal_set_quality_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         to_set = cb.data.split('_')[1]
-  
+
         if to_set == 'spatial':
-            #options = ['OFF', 'ATMOS AC3 JOC', 'ATMOS AC4', 'Sony 360RA']
+            # options = ['OFF', 'ATMOS AC3 JOC', 'ATMOS AC4', 'Sony 360RA']
             # assuming atleast tv session is added
             options = ['OFF', 'ATMOS AC3 JOC']
             if tidalapi.mobile_atmos:
@@ -100,23 +198,23 @@ async def tidal_set_quality_cb(c, cb:CallbackQuery):
                 current = options.index(tidalapi.spatial)
             except:
                 current = 0
-                
+
             nexti = (current + 1) % 4
             tidalapi.spatial = options[nexti]
             set_db.set_variable('TIDAL_SPATIAL', options[nexti])
         else:
-            qualities = {'LOW':'LOW','HIGH':'HIGH','LOSSLESS':'LOSSLESS','HI_RES':'MAX'}
+            qualities = {'LOW': 'LOW', 'HIGH': 'HIGH', 'LOSSLESS': 'LOSSLESS', 'HI_RES': 'MAX'}
             to_set = list(filter(lambda x: qualities[x] == to_set, qualities))[0]
             tidalapi.quality = to_set
             set_db.set_variable('TIDAL_QUALITY', to_set)
-            
+
         await tidal_quality_cb(c, cb)
 
 
 # show login button if not logged in
 # show refresh button in case logged in exist (both tv and mobile)
 @Client.on_callback_query(filters.regex(pattern=r"^tdAuth"))
-async def tidal_auth_cb(c, cb:CallbackQuery):
+async def tidal_auth_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         sub = tidalapi.sub_type
         hires = True if tidalapi.mobile_hires else False
@@ -129,8 +227,9 @@ async def tidal_auth_cb(c, cb:CallbackQuery):
             tidal_auth_buttons()
         )
 
+
 @Client.on_callback_query(filters.regex(pattern=r"^tdLogin"))
-async def tidal_login_cb(c:Client, cb:CallbackQuery):
+async def tidal_login_cb(c: Client, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         auth_url, err = await tidalapi.get_tv_login_url()
         if err:
@@ -139,7 +238,7 @@ async def tidal_login_cb(c:Client, cb:CallbackQuery):
                 err,
                 True
             )
-    
+
         await edit_message(
             cb.message,
             lang.s.TIDAL_AUTH_URL.format(auth_url),
@@ -168,8 +267,9 @@ async def tidal_login_cb(c:Client, cb:CallbackQuery):
                 tidal_auth_buttons()
             )
 
+
 @Client.on_callback_query(filters.regex(pattern=r"^tdRemove"))
-async def tidal_remove_login_cb(c:Client, cb:CallbackQuery):
+async def tidal_remove_login_cb(c: Client, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         set_db.set_variable("TIDAL_AUTH_DATA", 0, True, None)
 
@@ -189,4 +289,3 @@ async def tidal_remove_login_cb(c:Client, cb:CallbackQuery):
         )
 
         await tidal_auth_cb(c, cb)
-
