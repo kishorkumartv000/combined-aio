@@ -401,14 +401,15 @@ async def cleanup(user=None, metadata=None):
             LOGGER.info(e)
 
 # Apple Music specific utilities
-async def run_apple_downloader(url: str, output_dir: str, options: list = None) -> dict:
+async def run_apple_downloader(url: str, output_dir: str, options: list = None, user: dict = None) -> dict:
     """
-    Execute Apple Music downloader script with customizable options
+    Execute Apple Music downloader script with customizable options and progress reporting
     
     Args:
         url: Apple Music URL to download
         output_dir: Directory to save downloaded files
         options: List of additional command-line options
+        user: User details for progress updates
         
     Returns:
         dict: {'success': bool, 'error': str if failed}
@@ -429,10 +430,36 @@ async def run_apple_downloader(url: str, output_dir: str, options: list = None) 
         stderr=asyncio.subprocess.PIPE
     )
     
-    stdout, stderr = await process.communicate()
+    # Read output in real-time to capture progress
+    stdout_lines = []
+    while True:
+        line = await process.stdout.readline()
+        if not line:
+            break
+        line = line.decode().strip()
+        stdout_lines.append(line)
+        
+        # Check for progress reports
+        if line.startswith("PROGRESS:"):
+            progress = int(line.split(":")[1])
+            if user and 'bot_msg' in user:
+                try:
+                    await edit_message(
+                        user['bot_msg'],
+                        f"Apple Music Download: {progress}%"
+                    )
+                except FloodWait as e:
+                    await asyncio.sleep(e.value)
+                except Exception:
+                    pass
     
+    # Wait for process to finish
+    stderr = await process.stderr.read()
+    stderr = stderr.decode().strip()
+    
+    # Check return code
     if process.returncode != 0:
-        error = stderr.decode().strip() or stdout.decode().strip()
+        error = stderr or "\n".join(stdout_lines)
         return {'success': False, 'error': error}
     
     return {'success': True}
