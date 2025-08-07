@@ -80,6 +80,8 @@ class Config:
     APPLE_DEFAULT_FORMAT = getenv("APPLE_DEFAULT_FORMAT", "alac")          # alac or atmos
     APPLE_ALAC_QUALITY    = int(getenv("APPLE_ALAC_QUALITY", 192000))     # 192000, 256000, 320000
     APPLE_ATMOS_QUALITY   = int(getenv("APPLE_ATMOS_QUALITY", 2768))      # Only 2768 for Atmos
+    APPLE_ALAC_DIR        = "Apple Music (ALAC)"                           # Directory name for ALAC format
+    APPLE_ATMOS_DIR       = "Apple Music (Dolby Atmos)"                   # Directory name for Dolby Atmos format
 
     # Optional Settings (via /settings)
     BOT_PUBLIC            = getenv("BOT_PUBLIC", "False")                 # True or False
