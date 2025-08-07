@@ -42,7 +42,7 @@ async def download_track(c, msg: Message):
         if not spam:
             user = await fetch_user_details(msg, reply)
             user['link'] = link
-            user['bot_msg'] = await send_message(msg, 'Downloading.......')
+            user['bot_msg'] = await send_message(msg, 'Starting download...')
             try:
                 await start_link(link, user, options)
                 await send_message(user, lang.s.TASK_COMPLETED)
