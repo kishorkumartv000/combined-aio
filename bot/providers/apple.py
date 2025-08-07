@@ -165,10 +165,3 @@ async def start_apple(link: str, user: dict, options: dict = None):
     except Exception as e:
         logger.error(f"Apple Music error: {str(e)}", exc_info=True)
         await edit_message(user['bot_msg'], f"❌ Error: {str(e)}")
-    finally:
-        # Cleanup temporary files
-        try:
-            if 'folderpath' in result:
-                shutil.rmtree(result['folderpath'], ignore_errors=True)
-        except:
-            pass
