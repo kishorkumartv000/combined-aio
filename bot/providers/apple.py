@@ -2,16 +2,18 @@ import os
 import re
 import asyncio
 import logging
+import shutil
 from bot.helpers.utils import (
     run_apple_downloader,
     extract_apple_metadata,
     send_message,
     edit_message,
-    cleanup
+    format_string
 )
 from bot.helpers.uploader import track_upload, album_upload
 from bot.helpers.database.pg_impl import download_history
 from config import Config
+from bot.logger import LOGGER
 
 logger = logging.getLogger(__name__)
 
@@ -29,34 +31,56 @@ class AppleMusicProvider:
     
     async def process(self, url: str, user: dict, options: dict = None) -> dict:
         """Process Apple Music URL with options"""
-        # Create user-specific directory
-        user_dir = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']))
+        # Create user-specific directory in bot's structure
+        user_dir = os.path.join(Config.LOCAL_STORAGE, "Apple Music", str(user['user_id']))
         os.makedirs(user_dir, exist_ok=True)
         
         # Process options
         cmd_options = self.build_options(options)
         
+        # Add Apple-specific path options
+        alac_dir = os.path.join(user_dir, 'alac')
+        atmos_dir = os.path.join(user_dir, 'atmos')
+        os.makedirs(alac_dir, exist_ok=True)
+        os.makedirs(atmos_dir, exist_ok=True)
+        
+        cmd_options.extend(["--alac-save-folder", alac_dir])
+        cmd_options.extend(["--atmos-save-folder", atmos_dir])
+        
+        # Update user message
+        await edit_message(user['bot_msg'], "⏳ Starting Apple Music download...")
+        
         # Download content
-        result = await run_apple_downloader(url, user_dir, cmd_options)
+        result = await run_apple_downloader(url, user_dir, cmd_options, user)
         if not result['success']:
             return result
         
         # Find downloaded files
-        files = [f for f in os.listdir(user_dir) if f.endswith(('.m4a', '.flac'))]
+        files = []
+        for root, _, filenames in os.walk(user_dir):
+            for file in filenames:
+                if file.endswith(('.m4a', '.flac', '.alac')):
+                    files.append(os.path.join(root, file))
+        
         if not files:
             return {'success': False, 'error': "No files downloaded"}
         
         # Extract metadata
         tracks = []
-        for file in files:
-            file_path = os.path.join(user_dir, file)
+        for file_path in files:
             metadata = await extract_apple_metadata(file_path)
             metadata['filepath'] = file_path
             metadata['provider'] = self.name
             tracks.append(metadata)
         
         # Determine content type
-        content_type = 'track' if len(tracks) == 1 else 'album'
+        if len(tracks) == 1:
+            content_type = 'track'
+            folder_path = os.path.dirname(tracks[0]['filepath'])
+        else:
+            content_type = 'album'
+            # Find common parent directory
+            folder_path = os.path.commonpath([os.path.dirname(t['filepath']) for t in tracks])
         
         # Record download in history
         content_id = self.extract_content_id(url)
@@ -77,7 +101,7 @@ class AppleMusicProvider:
             'success': True,
             'type': content_type,
             'tracks': tracks,
-            'folderpath': user_dir,
+            'folderpath': folder_path,
             'title': tracks[0]['title'] if content_type == 'track' else tracks[0]['album'],
             'artist': tracks[0]['artist'],
             'album': tracks[0]['album'] if content_type == 'album' else None
@@ -120,9 +144,6 @@ async def start_apple(link: str, user: dict, options: dict = None):
             await edit_message(user['bot_msg'], "❌ Invalid Apple Music URL")
             return
         
-        # Update status message
-        await edit_message(user['bot_msg'], "⏳ Starting Apple Music download...")
-        
         # Process content with options
         result = await provider.process(link, user, options)
         if not result['success']:
@@ -145,4 +166,9 @@ async def start_apple(link: str, user: dict, options: dict = None):
         logger.error(f"Apple Music error: {str(e)}", exc_info=True)
         await edit_message(user['bot_msg'], f"❌ Error: {str(e)}")
     finally:
-        await cleanup(user)
+        # Cleanup temporary files
+        try:
+            if 'folderpath' in result:
+                shutil.rmtree(result['folderpath'], ignore_errors=True)
+        except:
+            pass
