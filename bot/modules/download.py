@@ -11,7 +11,8 @@ from ..helpers.qobuz.handler import start_qobuz
 from ..helpers.tidal.handler import start_tidal
 from ..helpers.deezer.handler import start_deezer
 from ..providers.apple import start_apple
-from ..helpers.message import send_message, antiSpam, check_user, fetch_user_details
+# IMPORT EDIT_MESSAGE HERE:
+from ..helpers.message import send_message, antiSpam, check_user, fetch_user_details, edit_message
 
 
 @Client.on_message(filters.command(CMD.DOWNLOAD))
@@ -48,7 +49,9 @@ async def download_track(c, msg: Message):
                 await send_message(user, lang.s.TASK_COMPLETED)
             except Exception as e:
                 LOGGER.error(f"Download failed: {e}")
-                await send_message(user, lang.s.ERR_DOWNLOAD_FAILED.format(e))
+                # USE SAFE ERROR MESSAGING
+                error_msg = f"Download failed: {str(e)}"
+                await send_message(user, error_msg)
             await c.delete_messages(msg.chat.id, user['bot_msg'].id)
             await cleanup(user)  # deletes uploaded files
             await antiSpam(msg.from_user.id, msg.chat.id, True)
@@ -105,7 +108,7 @@ async def start_link(link: str, user: dict, options: dict = None):
         return 'spotify'
     elif link.startswith(tuple(apple_music)):
         user['provider'] = 'Apple'
-        # Update progress message for Apple Music
+        # USE IMPORTED EDIT_MESSAGE FUNCTION
         await edit_message(user['bot_msg'], "Starting Apple Music download...")
         await start_apple(link, user, options)
     else:
