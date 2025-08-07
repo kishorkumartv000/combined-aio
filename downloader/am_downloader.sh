@@ -1,5 +1,5 @@
 #!/bin/bash
-# Apple Music Downloader - Core Download Functionality
+# Apple Music Downloader - Core Download Functionality with Progress Reporting
 set -e
 
 # Explicitly add Go to PATH
@@ -28,15 +28,36 @@ fi
 # Change to Go project directory
 cd "$HOME/amalac"
 
+# Function to report progress
+report_progress() {
+    echo "PROGRESS:$1"
+}
+
 # Build the download command
 cmd=(
     go run main.go
     "$@"
 )
 
-# Execute download
+# Execute download with progress reporting
 echo "Starting Apple Music download..."
-"${cmd[@]}"
+report_progress "10"
+
+# Run the command and capture output
+"${cmd[@]}" | while IFS= read -r line; do
+    # Check for specific progress indicators in the output
+    if [[ $line == *"Downloading track"* ]]; then
+        report_progress "30"
+    elif [[ $line == *"Download complete"* ]]; then
+        report_progress "70"
+    elif [[ $line == *"Applying metadata"* ]]; then
+        report_progress "90"
+    fi
+    echo "$line"
+done
+
+# Final progress
+report_progress "100"
 
 # Output success message
 echo "Download completed successfully!"
