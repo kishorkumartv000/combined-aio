@@ -32,8 +32,9 @@ class AppleMusicProvider:
     async def process(self, url: str, user: dict, options: dict = None) -> dict:
         """Process Apple Music URL with options"""
         # Create user-specific directory in bot's structure
-        user_dir = os.path.join(Config.LOCAL_STORAGE, "Apple Music", str(user['user_id']))
+        user_dir = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
         os.makedirs(user_dir, exist_ok=True)
+        LOGGER.info(f"Created Apple Music directory: {user_dir}")
         
         # Process options
         cmd_options = self.build_options(options)
@@ -53,6 +54,7 @@ class AppleMusicProvider:
         # Download content
         result = await run_apple_downloader(url, user_dir, cmd_options, user)
         if not result['success']:
+            LOGGER.error(f"Apple downloader failed: {result['error']}")
             return result
         
         # Find downloaded files
@@ -63,7 +65,17 @@ class AppleMusicProvider:
                     files.append(os.path.join(root, file))
         
         if not files:
+            LOGGER.error(f"No files found in: {user_dir}")
+            # List directory contents for debugging
+            try:
+                LOGGER.error(f"Directory contents: {os.listdir(user_dir)}")
+                LOGGER.error(f"alac dir contents: {os.listdir(alac_dir)}")
+                LOGGER.error(f"atmos dir contents: {os.listdir(atmos_dir)}")
+            except Exception as e:
+                LOGGER.error(f"Error listing contents: {str(e)}")
             return {'success': False, 'error': "No files downloaded"}
+        
+        LOGGER.info(f"Found {len(files)} files in {user_dir}")
         
         # Extract metadata
         tracks = []
@@ -72,6 +84,7 @@ class AppleMusicProvider:
             metadata['filepath'] = file_path
             metadata['provider'] = self.name
             tracks.append(metadata)
+            LOGGER.info(f"Processed file: {file_path}")
         
         # Determine content type
         if len(tracks) == 1:
