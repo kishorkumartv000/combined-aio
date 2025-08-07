@@ -22,6 +22,7 @@ class Config:
     ADMINS = set(int(x) for x in getenv("ADMINS").split()) if getenv("ADMINS") else set()
 
     # Working Directory
+    UPLOAD_MODE = getenv("UPLOAD_MODE", "Telegram")  # Default to Telegram
     WORK_DIR = getenv("WORK_DIR", "./bot/")
     DOWNLOADS_FOLDER = getenv("DOWNLOADS_FOLDER", "DOWNLOADS")
     LOCAL_STORAGE = getenv("LOCAL_STORAGE", WORK_DIR + DOWNLOADS_FOLDER)
