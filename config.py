@@ -30,7 +30,9 @@ class Config:
     DOWNLOADS_FOLDER  = getenv("DOWNLOADS_FOLDER", "DOWNLOADS")            # Folder name inside WORK_DIR
     LOCAL_STORAGE     = getenv("LOCAL_STORAGE", WORK_DIR + DOWNLOADS_FOLDER)  
                                                                             # Local storage path (path)
-
+    # Base directory for downloads
+    DOWNLOAD_BASE_DIR = LOCAL_STORAGE
+    
     # File/Folder Naming
     PLAYLIST_NAME_FORMAT = getenv("PLAYLIST_NAME_FORMAT", "{title} - Playlist")  
                                                                             # e.g. "{title} - Playlist"
