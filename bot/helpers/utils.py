@@ -374,31 +374,57 @@ async def cleanup(user=None, metadata=None):
     """
     if metadata:
         try:
+            # Apple Music specific cleanup
+            if "Apple Music" in metadata.get('folderpath', ''):
+                if os.path.exists(metadata['folderpath']):
+                    shutil.rmtree(metadata['folderpath'], ignore_errors=True)
+                return
+            
+            # Existing cleanup for other providers
             if metadata['type'] == 'album':
-                is_zip = True if bot_set.album_zip else False
+                is_zip = bot_set.album_zip
             elif metadata['type'] == 'artist':
-                is_zip = True if bot_set.artist_zip else False
+                is_zip = bot_set.artist_zip
             else:
-                is_zip = True if bot_set.playlist_zip else False
+                is_zip = bot_set.playlist_zip
+                
             if is_zip:
-                if type(metadata['folderpath']) == list:
-                    for i in metadata['folderpath']:
-                        os.remove(i)
-                else:
-                    os.remove(metadata['folderpath'])
+                paths = metadata['folderpath'] if isinstance(metadata['folderpath'], list) else [metadata['folderpath']]
+                for path in paths:
+                    try:
+                        if os.path.exists(path):
+                            os.remove(path)
+                    except:
+                        pass
             else:
-                shutil.rmtree(metadata['folderpath'])
-        except FileNotFoundError:
-            pass
+                if os.path.exists(metadata['folderpath']):
+                    shutil.rmtree(metadata['folderpath'], ignore_errors=True)
+        except Exception as e:
+            LOGGER.info(f"Metadata cleanup error: {str(e)}")
+    
     if user:
         try:
-            shutil.rmtree(f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/")
+            # Clean up Apple Music directory
+            apple_dir = os.path.join(Config.LOCAL_STORAGE, "Apple Music", str(user['user_id']))
+            if os.path.exists(apple_dir):
+                shutil.rmtree(apple_dir, ignore_errors=True)
         except Exception as e:
-            LOGGER.info(e)
+            LOGGER.info(f"Apple cleanup error: {str(e)}")
+        
         try:
-            shutil.rmtree(f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}-temp/")
+            # Clean up old-style directories
+            old_dir = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/"
+            if os.path.exists(old_dir):
+                shutil.rmtree(old_dir, ignore_errors=True)
         except Exception as e:
-            LOGGER.info(e)
+            LOGGER.info(f"Old dir cleanup error: {str(e)}")
+        
+        try:
+            temp_dir = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}-temp/"
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception as e:
+            LOGGER.info(f"Temp dir cleanup error: {str(e)}")
 
 # Apple Music specific utilities
 async def run_apple_downloader(url: str, output_dir: str, options: list = None, user: dict = None) -> dict:
