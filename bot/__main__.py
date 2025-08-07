@@ -22,14 +22,24 @@ if __name__ == "__main__":
         os.makedirs(Config.LOCAL_STORAGE)
         LOGGER.info(f"Created download directory: {Config.LOCAL_STORAGE}")
     
-    # Ensure Apple Music downloader is installed
-    if not os.path.exists(Config.DOWNLOADER_PATH):
+    # Ensure Apple Music downloader is installed and executable
+    downloader_path = Config.DOWNLOADER_PATH
+    if not os.path.exists(downloader_path):
         LOGGER.warning("Apple Music downloader not found! Attempting installation...")
         try:
             subprocess.run([Config.INSTALLER_PATH], check=True)
             LOGGER.info("Apple Music downloader installed successfully")
         except Exception as e:
             LOGGER.error(f"Apple Music installer failed: {str(e)}")
+    
+    # ADD THIS PERMISSION FIX:
+    if os.path.exists(downloader_path):
+        try:
+            # Set execute permissions
+            os.chmod(downloader_path, 0o755)
+            LOGGER.info(f"Set execute permissions on: {downloader_path}")
+        except Exception as e:
+            LOGGER.error(f"Failed to set permissions: {str(e)}")
     
     # Start the bot
     LOGGER.info("Starting Apple Music Downloader Bot...")
