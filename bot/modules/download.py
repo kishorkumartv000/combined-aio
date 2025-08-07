@@ -105,6 +105,8 @@ async def start_link(link: str, user: dict, options: dict = None):
         return 'spotify'
     elif link.startswith(tuple(apple_music)):
         user['provider'] = 'Apple'
+        # Update progress message for Apple Music
+        await edit_message(user['bot_msg'], "Starting Apple Music download...")
         await start_apple(link, user, options)
     else:
         await send_message(user, lang.s.ERR_UNSUPPORTED_LINK)
