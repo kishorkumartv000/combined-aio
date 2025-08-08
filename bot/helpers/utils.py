@@ -632,10 +632,44 @@ def default_metadata(file_path):
     }
 
 
-async def create_apple_zip(directory: str, user_id: int) -> str:
-    """Create zip file for Apple Music downloads"""
-    zip_path = os.path.join(Config.LOCAL_STORAGE, f"apple_{user_id}.zip")
+async def create_apple_zip(directory: str, user_id: int, metadata: dict) -> str:
+    """
+    Create zip file with descriptive name for downloads
+    Args:
+        directory: Path to the content directory
+        user_id: Telegram user ID
+        metadata: Content metadata dictionary
+    Returns:
+        Path to the created zip file
+    """
+    # Determine content type and name
+    content_type = metadata.get('type', 'album').capitalize()
+    content_name = metadata.get('title', 'Unknown')
+    provider = metadata.get('provider', 'Apple Music')
     
+    # Sanitize the content name for filesystem safety
+    safe_name = re.sub(r'[\\/*?:"<>|]', "", content_name)
+    safe_name = safe_name.replace(' ', '_')[:100]  # Limit length
+    
+    # Create descriptive filename based on content type
+    if content_type.lower() == 'album':
+        zip_name = f"[{provider}] {safe_name}"
+    elif content_type.lower() == 'playlist':
+        zip_name = f"[{provider}] {safe_name} (Playlist)"
+    else:
+        zip_name = f"[{provider}] {safe_name}"
+    
+    # Create zip path in the content's directory
+    zip_dir = os.path.dirname(directory)
+    zip_path = os.path.join(zip_dir, f"{zip_name}.zip")
+    
+    # Ensure unique filename
+    counter = 1
+    while os.path.exists(zip_path):
+        zip_path = os.path.join(zip_dir, f"{zip_name}_{counter}.zip")
+        counter += 1
+    
+    # Create the zip file
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, _, files in os.walk(directory):
             for file in files:
@@ -643,4 +677,5 @@ async def create_apple_zip(directory: str, user_id: int) -> str:
                 arcname = os.path.relpath(file_path, directory)
                 zipf.write(file_path, arcname)
     
+    LOGGER.info(f"Created descriptive zip: {zip_path}")
     return zip_path
