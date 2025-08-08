@@ -11,7 +11,6 @@ from bot.logger import LOGGER
 
 import bot.helpers.translations as lang
 
-
 current_user = []
 
 user_details = {
@@ -83,6 +82,9 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
     if not isinstance(user, dict):
         user = await fetch_user_details(user)
     chat_id = chat_id if chat_id else user['chat_id']
+    
+    # Initialize msg to prevent UnboundLocalError
+    msg = None
 
     try:
         if itype == 'text':
@@ -111,6 +113,17 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
                 thumb=meta['thumbnail'],
                 reply_to_message_id=user['r_id']
             )
+        elif itype == 'video':  # Added video type support
+            msg = await aio.send_video(
+                chat_id=chat_id,
+                video=item,
+                caption=caption,
+                duration=int(meta.get('duration', 0)),
+                width=int(meta.get('width', 1920)),
+                height=int(meta.get('height', 1080)),
+                thumb=meta.get('thumbnail'),
+                reply_to_message_id=user['r_id']
+            )
         elif itype == 'pic':
             msg = await aio.send_photo(
                 chat_id=chat_id,
@@ -121,6 +134,9 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
     except FloodWait as e:
         await asyncio.sleep(e.value)
         return await send_message(user, item, itype, caption, markup, chat_id, meta)
+    except Exception as e:
+        LOGGER.error(f"Error sending message: {str(e)}")
+    
     return msg
 
 
