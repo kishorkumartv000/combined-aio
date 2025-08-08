@@ -17,6 +17,7 @@ from aiohttp import ClientTimeout
 from concurrent.futures import ThreadPoolExecutor
 from pyrogram.errors import FloodWait
 
+# Import Config for Apple Music settings
 from config import Config
 import bot.helpers.translations as lang
 
@@ -26,17 +27,17 @@ from .buttons.links import links_button
 from .message import send_message, edit_message
 
 MAX_SIZE = 1.9 * 1024 * 1024 * 1024  # 2GB
-# download folder structure : BASE_DOWNLOAD_DIR + message_r_id
 
 async def download_file(url, path, retries=3, timeout=30):
     """
+    Download a file with retry logic and timeout
     Args:
-        url (str): URL to download.
-        path (str): Path including filename with extension.
-        retries (int): Number of retries in case of failure.
-        timeout (int): Timeout duration for the request in seconds.
+        url (str): URL to download
+        path (str): Full path to save the file
+        retries (int): Number of retry attempts
+        timeout (int): Timeout in seconds
     Returns:
-        str or None: Error message if any, else None.
+        str or None: Error message if failed, else None
     """
     os.makedirs(os.path.dirname(path), exist_ok=True)
     
@@ -61,12 +62,13 @@ async def download_file(url, path, retries=3, timeout=30):
 
 async def format_string(text:str, data:dict, user=None):
     """
+    Format text using metadata placeholders
     Args:
-        text: text to be formatted
-        data: source info
-        user: user details
+        text: Template text with placeholders
+        data: Metadata dictionary
+        user: User details
     Returns:
-        str
+        Formatted string
     """
     replacements = {
         '{title}': data.get('title', ''),
@@ -101,9 +103,12 @@ async def format_string(text:str, data:dict, user=None):
 
 async def run_concurrent_tasks(tasks, progress_details=None):
     """
+    Run tasks concurrently with progress tracking
     Args:
-        tasks: (list) async functions to be run
-        progress_details: details for progress message (dict)    
+        tasks: List of async tasks
+        progress_details: Progress message details
+    Returns:
+        Results of all tasks
     """
     semaphore = asyncio.Semaphore(Config.MAX_WORKERS)
     completed = 0
@@ -130,20 +135,19 @@ async def run_concurrent_tasks(tasks, progress_details=None):
 
 async def create_link(path, basepath):
     """
-    Creates rclone and index link
+    Create rclone and index links
     Args:
-        path: full real path
-        basepath: to remove bot folder from real path (DOWNLOADS/r_id/)
+        path: Full file path
+        basepath: Base directory path
     Returns:
-        rclone_link: link from rclone
-        index_link: index link if enabled
+        rclone_link, index_link
     """
     path = str(Path(path).relative_to(basepath))
 
     rclone_link = None
     index_link = None
 
-    if bot_set.link_options == 'RCLONE' or bot_set.link_options=='Both':
+    if bot_set.link_options in ['RCLONE', 'Both']:
         cmd = f'rclone link --config ./rclone.conf "{Config.RCLONE_DEST}/{path}"'
         task = await asyncio.create_subprocess_shell(
             cmd,
@@ -158,7 +162,8 @@ async def create_link(path, basepath):
         else:
             error_message = stderr.decode().strip()
             LOGGER.debug(f"Failed to get link: {error_message}")
-    if bot_set.link_options == 'Index' or bot_set.link_options=='Both':
+            
+    if bot_set.link_options in ['Index', 'Both']:
         if Config.INDEX_LINK:
             index_link =  Config.INDEX_LINK + '/' + quote(path)
 
@@ -166,6 +171,13 @@ async def create_link(path, basepath):
 
 
 async def zip_handler(folderpath):
+    """
+    Zip folder based on upload mode
+    Args:
+        folderpath: Path to folder
+    Returns:
+        List of zip paths
+    """
     loop = asyncio.get_running_loop()
     with ThreadPoolExecutor() as pool:
         if bot_set.upload_mode == 'Telegram':
@@ -177,10 +189,11 @@ async def zip_handler(folderpath):
 
 def split_zip_folder(folderpath) -> list:
     """
+    Split large folders into multiple zip files
     Args:
-        folderpath: path to folder to zip
+        folderpath: Path to folder
     Returns:
-        list of zip file paths
+        List of zip file paths
     """
     zip_paths = []
     part_num = 1
@@ -188,6 +201,7 @@ def split_zip_folder(folderpath) -> list:
     current_files = []
 
     def add_to_zip(zip_name, files_to_add):
+        nonlocal part_num
         if part_num == 1:
             zip_path = f"{zip_name}.zip"
         else:
@@ -196,7 +210,7 @@ def split_zip_folder(folderpath) -> list:
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for file_path, arcname in files_to_add:
                 zipf.write(file_path, arcname)
-                os.remove(file_path)  # Delete the file after zipping
+                os.remove(file_path)  # Delete after zipping
         return zip_path
 
     for root, dirs, files in os.walk(folderpath):
@@ -205,18 +219,18 @@ def split_zip_folder(folderpath) -> list:
             file_size = os.path.getsize(file_path)
             arcname = os.path.relpath(file_path, folderpath)
 
-            # If adding this file would exceed the max size, create a zip for the current files
+            # Start new zip if adding would exceed max size
             if current_size + file_size > MAX_SIZE:
                 zip_paths.append(add_to_zip(folderpath, current_files))
                 part_num += 1
-                current_files = []  # Reset for the next zip part
+                current_files = []
                 current_size = 0
 
-            # Add the file to the current group
+            # Add to current group
             current_files.append((file_path, arcname))
             current_size += file_size
 
-    # Create the final zip with any remaining files
+    # Create final zip with remaining files
     if current_files:
         zip_paths.append(add_to_zip(folderpath, current_files))
 
@@ -225,10 +239,11 @@ def split_zip_folder(folderpath) -> list:
 
 def zip_folder(folderpath) -> str:
     """
+    Create single zip of folder
     Args:
-        folderpath (str): The path of the folder to zip.
+        folderpath: Path to folder
     Returns:
-        str: The path to the created zip file.
+        Path to zip file
     """
     zip_path = f"{folderpath}.zip"
     
@@ -237,7 +252,6 @@ def zip_folder(folderpath) -> str:
             for file in files:
                 file_path = os.path.join(root, file)
                 zipf.write(file_path, os.path.relpath(file_path, folderpath))
-                # Remove file after adding to the zip
                 os.remove(file_path)
     
     return zip_path
@@ -245,20 +259,22 @@ def zip_folder(folderpath) -> str:
 
 async def move_sorted_playlist(metadata, user) -> str:
     """
-    Moves the sorted playlist files into a new playlist folder.
-    Used since sorted tracks doest belong to a specific palylist folder
+    Organize playlist files into folder structure
+    Args:
+        metadata: Playlist metadata
+        user: User details
     Returns:
-        str: path to the newly created playlist folder
+        Path to playlist folder
     """
-
     source_folder = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{metadata['provider']}"
     destination_folder = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{metadata['provider']}/{metadata['title']}"
 
     os.makedirs(destination_folder, exist_ok=True)
 
-    # get list of folders inside the source
+    # Move all artist/album folders
     folders = [
-        os.path.join(source_folder, name) for name in os.listdir(source_folder) if os.path.isdir(os.path.join(source_folder, name))
+        os.path.join(source_folder, name) for name in os.listdir(source_folder) 
+        if os.path.isdir(os.path.join(source_folder, name))
     ]
 
     for folder in folders:
@@ -269,10 +285,12 @@ async def move_sorted_playlist(metadata, user) -> str:
 
 async def post_art_poster(user:dict, meta:dict):
     """
+    Post album/playlist art as image
     Args:
-        markup: buttons if needed
+        user: User details
+        meta: Item metadata
     Returns:
-        Message
+        Message object
     """
     photo = meta['cover']
     if meta['type'] == 'album':
@@ -281,12 +299,19 @@ async def post_art_poster(user:dict, meta:dict):
         caption = await format_string(lang.s.PLAYLIST_TEMPLATE, meta, user)
     
     if bot_set.art_poster:
-        msg = await send_message(user, photo, 'pic', caption)
-        return msg
+        return await send_message(user, photo, 'pic', caption)
 
 
 async def create_simple_text(meta, user):
-    caption = await format_string(
+    """
+    Create simple caption for items
+    Args:
+        meta: Item metadata
+        user: User details
+    Returns:
+        Formatted caption text
+    """
+    return await format_string(
         lang.s.SIMPLE_TITLE.format(
             meta['title'],
             meta['type'].title(),
@@ -295,15 +320,17 @@ async def create_simple_text(meta, user):
         meta, 
         user
     )
-    return caption
 
 
 async def edit_art_poster(metadata, user, r_link, i_link, caption):
     """
-    Edits Album/Playlist Art Poster with given information
+    Edit existing art poster with links
     Args:
-        metadata: metadata dict of item
-        caption: text to edit
+        metadata: Item metadata
+        user: User details
+        r_link: Rclone link
+        i_link: Index link
+        caption: Text to display
     """
     markup = links_button(r_link, i_link)
     await edit_message(
@@ -315,27 +342,28 @@ async def edit_art_poster(metadata, user, r_link, i_link, caption):
 
 async def post_simple_message(user, meta, r_link=None, i_link=None):
     """
-    Sends a simple message of item with button
+    Send simple message with optional links
     Args:
-        user: user details
-        meta: metadata
-        markup: buttons if needed
+        user: User details
+        meta: Item metadata
+        r_link: Rclone link
+        i_link: Index link
     Returns:
-        Message
+        Message object
     """
     caption = await create_simple_text(meta, user)
     markup = links_button(r_link, i_link)
-    await send_message(user, caption, markup=markup)
+    return await send_message(user, caption, markup=markup)
 
 
 async def progress_message(done, total, details):
     """
+    Update progress message
     Args:
-        done: how much task done
-        total: total number of tasks
-        details: Message, text (dict)
+        done: Completed items
+        total: Total items
+        details: Progress message details
     """
-    # Calculate progress bar
     filled = math.floor((done / total) * 10)
     empty = 10 - filled
     
@@ -357,20 +385,16 @@ async def progress_message(done, total, details):
             None,
             False
         )
-    except FloodWait as e:
-        pass # don't update the message if flooded
+    except FloodWait:
+        pass  # Skip update during flood limits
 
 
 async def cleanup(user=None, metadata=None):
     """
-    Clean up after task completed - For concurrent downloads
-    Clean up after upload - For single download
-    
-    if metadata
-        Artist/Album/Playlist files are deleted
-    if user
-        user root folder is removed
-    
+    Clean up downloaded files
+    Args:
+        user: User details (cleans user directory)
+        metadata: Item metadata (cleans specific item)
     """
     if metadata:
         try:
@@ -433,15 +457,23 @@ async def run_apple_downloader(url: str, output_dir: str, options: list = None, 
     
     Args:
         url: Apple Music URL to download
-        output_dir: Directory to save downloaded files
-        options: List of additional command-line options
+        output_dir: User-specific directory to save files
+        options: List of command-line options
         user: User details for progress updates
         
     Returns:
         dict: {'success': bool, 'error': str if failed}
     """
-    # Create config file
+    # Create ALAC and Atmos subdirectories
+    alac_dir = os.path.join(output_dir, "alac")
+    atmos_dir = os.path.join(output_dir, "atmos")
+    os.makedirs(alac_dir, exist_ok=True)
+    os.makedirs(atmos_dir, exist_ok=True)
+    
+    # Create config file with user-specific paths
     config_path = os.path.join(output_dir, "config.yaml")
+    
+    # Dynamic configuration with user-specific paths
     config_content = f"""# Configuration for Apple Music downloader
 lrc-type: "lyrics"
 lrc-format: "lrc"
@@ -459,8 +491,8 @@ get-m3u8-port: "127.0.0.1:20020"
 get-m3u8-from-device: true
 get-m3u8-mode: hires
 aac-type: aac-lc
-alac-max: 192000
-atmos-max: 2768
+alac-max: {Config.APPLE_ALAC_QUALITY}
+atmos-max: {Config.APPLE_ATMOS_QUALITY}
 limit-max: 200
 album-folder-format: "{{AlbumName}}"
 playlist-folder-format: "{{PlaylistName}}"
@@ -473,6 +505,9 @@ use-songinfo-for-playlist: false
 dl-albumcover-for-playlist: false
 mv-audio-type: atmos
 mv-max: 2160
+# USER-SPECIFIC PATHS:
+alac-save-folder: {alac_dir}
+atmos-save-folder: {atmos_dir}
 """
     
     with open(config_path, 'w') as config_file:
@@ -480,7 +515,7 @@ mv-max: 2160
     
     LOGGER.info(f"Created Apple Music config at: {config_path}")
     
-    # Build command
+    # Build command with user-specific options
     cmd = [Config.DOWNLOADER_PATH]
     if options:
         cmd.extend(options)
@@ -491,7 +526,7 @@ mv-max: 2160
     # Run the command
     process = await asyncio.create_subprocess_exec(
         *cmd,
-        cwd=output_dir,  # Crucial: set working directory
+        cwd=output_dir,  # Set working directory to user folder
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
@@ -541,6 +576,13 @@ mv-max: 2160
 
 
 async def extract_apple_metadata(file_path: str) -> dict:
+    """
+    Extract metadata from Apple Music files
+    Args:
+        file_path: Path to audio file
+    Returns:
+        Metadata dictionary
+    """
     try:
         if file_path.endswith('.m4a'):
             audio = MP4(file_path)
