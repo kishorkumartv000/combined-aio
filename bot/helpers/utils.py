@@ -429,7 +429,7 @@ async def cleanup(user=None, metadata=None):
 # Apple Music specific utilities
 async def run_apple_downloader(url: str, output_dir: str, options: list = None, user: dict = None) -> dict:
     """
-    Execute Apple Music downloader script with customizable options and progress reporting
+    Execute Apple Music downloader script with config file setup
     
     Args:
         url: Apple Music URL to download
@@ -440,44 +440,92 @@ async def run_apple_downloader(url: str, output_dir: str, options: list = None, 
     Returns:
         dict: {'success': bool, 'error': str if failed}
     """
-    cmd = [Config.DOWNLOADER_PATH]
+    # Create config file
+    config_path = os.path.join(output_dir, "config.yaml")
+    config_content = f"""# Configuration for Apple Music downloader
+lrc-type: "lyrics"
+lrc-format: "lrc"
+embed-lrc: true
+save-lrc-file: true
+save-artist-cover: true
+save-animated-artwork: false
+emby-animated-artwork: false
+embed-cover: true
+cover-size: 5000x5000
+cover-format: original
+max-memory-limit: 256
+decrypt-m3u8-port: "127.0.0.1:10020"
+get-m3u8-port: "127.0.0.1:20020"
+get-m3u8-from-device: true
+get-m3u8-mode: hires
+aac-type: aac-lc
+alac-max: 192000
+atmos-max: 2768
+limit-max: 200
+album-folder-format: "{{AlbumName}}"
+playlist-folder-format: "{{PlaylistName}}"
+song-file-format: "{{SongNumer}}. {{SongName}}"
+artist-folder-format: "{{UrlArtistName}}"
+explicit-choice : "[E]"
+clean-choice : "[C]"
+apple-master-choice : "[M]"
+use-songinfo-for-playlist: false
+dl-albumcover-for-playlist: false
+mv-audio-type: atmos
+mv-max: 2160
+"""
     
-    # Add options if provided
+    with open(config_path, 'w') as config_file:
+        config_file.write(config_content)
+    
+    LOGGER.info(f"Created Apple Music config at: {config_path}")
+    
+    # Build command
+    cmd = [Config.DOWNLOADER_PATH]
     if options:
         cmd.extend(options)
-    
-    # Add URL
     cmd.append(url)
     
+    LOGGER.info(f"Running Apple downloader: {' '.join(cmd)} in {output_dir}")
+    
+    # Run the command
     process = await asyncio.create_subprocess_exec(
         *cmd,
-        cwd=output_dir,
+        cwd=output_dir,  # Crucial: set working directory
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
     
-    # Read output in real-time to capture progress
-    stdout_lines = []
+    # Read output in chunks to avoid buffer overrun
+    stdout_chunks = []
     while True:
-        line = await process.stdout.readline()
-        if not line:
+        chunk = await process.stdout.read(4096)  # Read 4KB chunks
+        if not chunk:
             break
-        line = line.decode().strip()
-        stdout_lines.append(line)
+        stdout_chunks.append(chunk)
         
-        # Check for progress reports
-        if line.startswith("PROGRESS:"):
-            progress = int(line.split(":")[1])
-            if user and 'bot_msg' in user:
+        # Process chunk for progress updates
+        chunk_str = chunk.decode(errors='ignore')
+        if user and 'bot_msg' in user:
+            # Look for progress in the chunk
+            progress_match = re.search(r'(\d+)%', chunk_str)
+            if progress_match:
                 try:
+                    progress = int(progress_match.group(1))
                     await edit_message(
                         user['bot_msg'],
                         f"Apple Music Download: {progress}%"
                     )
-                except FloodWait as e:
-                    await asyncio.sleep(e.value)
-                except Exception:
+                except:
                     pass
+    
+    # Combine all chunks
+    stdout_output = b''.join(stdout_chunks).decode(errors='ignore')
+    stdout_lines = stdout_output.splitlines()
+    
+    # Log all output lines
+    for line in stdout_lines:
+        LOGGER.debug(f"Apple Downloader: {line}")
     
     # Wait for process to finish
     stderr = await process.stderr.read()
@@ -486,6 +534,7 @@ async def run_apple_downloader(url: str, output_dir: str, options: list = None, 
     # Check return code
     if process.returncode != 0:
         error = stderr or "\n".join(stdout_lines)
+        LOGGER.error(f"Apple downloader failed: {error}")
         return {'success': False, 'error': error}
     
     return {'success': True}
