@@ -103,25 +103,37 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
                 reply_to_message_id=user['r_id']
             )
         elif itype == 'audio':
+            # SAFE METADATA ACCESS WITH DEFAULTS
+            duration = int(meta.get('duration', 0)) if meta else 0
+            artist = meta.get('artist', 'Unknown Artist') if meta else 'Unknown Artist'
+            title = meta.get('title', 'Unknown Track') if meta else 'Unknown Track'
+            thumbnail = meta.get('thumbnail') if meta else None
+            
             msg = await aio.send_audio(
                 chat_id=chat_id,
                 audio=item,
                 caption=caption,
-                duration=int(meta['duration']),
-                performer=meta['artist'],
-                title=meta['title'],
-                thumb=meta['thumbnail'],
+                duration=duration,
+                performer=artist,
+                title=title,
+                thumb=thumbnail,
                 reply_to_message_id=user['r_id']
             )
         elif itype == 'video':  # Added video type support
+            # SAFE METADATA ACCESS WITH DEFAULTS
+            duration = int(meta.get('duration', 0)) if meta else 0
+            width = int(meta.get('width', 1920)) if meta else 1920
+            height = int(meta.get('height', 1080)) if meta else 1080
+            thumbnail = meta.get('thumbnail') if meta else None
+            
             msg = await aio.send_video(
                 chat_id=chat_id,
                 video=item,
                 caption=caption,
-                duration=int(meta.get('duration', 0)),
-                width=int(meta.get('width', 1920)),
-                height=int(meta.get('height', 1080)),
-                thumb=meta.get('thumbnail'),
+                duration=duration,
+                width=width,
+                height=height,
+                thumb=thumbnail,
                 reply_to_message_id=user['r_id']
             )
         elif itype == 'pic':
