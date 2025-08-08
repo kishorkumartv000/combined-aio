@@ -10,7 +10,7 @@ from bot.helpers.utils import (
     edit_message,
     format_string
 )
-from bot.helpers.uploader import track_upload, album_upload
+from bot.helpers.uploader import track_upload, album_upload, music_video_upload
 from bot.helpers.database.pg_impl import download_history
 from config import Config
 from bot.logger import LOGGER
@@ -22,16 +22,20 @@ class AppleMusicProvider:
         self.name = "apple"
     
     def validate_url(self, url: str) -> bool:
-        return bool(re.match(r"https://music\.apple\.com/.+/(album|song|playlist)/.+", url))
+        """Check if URL is valid Apple Music content"""
+        return bool(re.match(
+            r"https://music\.apple\.com/.+/(album|song|playlist|music-video)/.+", 
+            url
+        ))
     
     def extract_content_id(self, url: str) -> str:
         """Extract Apple Music content ID from URL"""
-        match = re.search(r'/(album|song|playlist|artist)/[^/]+/(\d+)', url)
+        match = re.search(r'/(album|song|playlist|music-video|artist)/[^/]+/(\d+)', url)
         return match.group(2) if match else "unknown"
     
     async def process(self, url: str, user: dict, options: dict = None) -> dict:
         """Process Apple Music URL with options"""
-        # Create user-specific directory in bot's structure
+        # Create user-specific directory
         user_dir = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
         os.makedirs(user_dir, exist_ok=True)
         LOGGER.info(f"Created Apple Music directory: {user_dir}")
@@ -52,12 +56,13 @@ class AppleMusicProvider:
         files = []
         for root, _, filenames in os.walk(user_dir):
             for file in filenames:
-                if file.endswith(('.m4a', '.flac', '.alac')):
-                    files.append(os.path.join(root, file))
+                file_path = os.path.join(root, file)
+                # Collect all relevant files
+                if file.endswith(('.m4a', '.flac', '.alac', '.mp4', '.m4v', '.mov')):
+                    files.append(file_path)
         
         if not files:
             LOGGER.error(f"No files found in: {user_dir}")
-            # List directory contents for debugging
             try:
                 LOGGER.error(f"Directory contents: {os.listdir(user_dir)}")
             except Exception as e:
@@ -67,46 +72,48 @@ class AppleMusicProvider:
         LOGGER.info(f"Found {len(files)} files in {user_dir}")
         
         # Extract metadata
-        tracks = []
+        items = []
         for file_path in files:
             metadata = await extract_apple_metadata(file_path)
             metadata['filepath'] = file_path
             metadata['provider'] = self.name
-            tracks.append(metadata)
+            items.append(metadata)
             LOGGER.info(f"Processed file: {file_path}")
         
         # Determine content type
-        if len(tracks) == 1:
-            content_type = 'track'
-            folder_path = os.path.dirname(tracks[0]['filepath'])
+        is_video = any(f.endswith(('.mp4', '.m4v', '.mov')) for f in files)
+        
+        if len(items) == 1:
+            content_type = 'video' if is_video else 'track'
+            folder_path = os.path.dirname(items[0]['filepath'])
         else:
             content_type = 'album'
-            # Find common parent directory
-            folder_path = os.path.commonpath([os.path.dirname(t['filepath']) for t in tracks])
+            folder_path = os.path.commonpath([os.path.dirname(t['filepath']) for t in items])
         
         # Record download in history
         content_id = self.extract_content_id(url)
-        quality = options.get('alac-max', Config.APPLE_ALAC_QUALITY) if 'alac' in options else \
-                  options.get('atmos-max', Config.APPLE_ATMOS_QUALITY)
+        quality = options.get('mv-max', Config.APPLE_ATMOS_QUALITY) if is_video else \
+                 options.get('alac-max', Config.APPLE_ALAC_QUALITY) if 'alac' in (options or {}) else \
+                 options.get('atmos-max', Config.APPLE_ATMOS_QUALITY)
         
         download_history.record_download(
             user_id=user['user_id'],
             provider=self.name,
             content_type=content_type,
             content_id=content_id,
-            title=tracks[0]['title'] if content_type == 'track' else tracks[0]['album'],
-            artist=tracks[0]['artist'],
-            quality=quality
+            title=items[0]['title'],
+            artist=items[0]['artist'],
+            quality=str(quality)  # Convert to string
         )
         
         return {
             'success': True,
             'type': content_type,
-            'tracks': tracks,
+            'items': items,
             'folderpath': folder_path,
-            'title': tracks[0]['title'] if content_type == 'track' else tracks[0]['album'],
-            'artist': tracks[0]['artist'],
-            'album': tracks[0]['album'] if content_type == 'album' else None
+            'title': items[0]['title'],
+            'artist': items[0]['artist'],
+            'album': items[0].get('album', '')
         }
     
     def build_options(self, options: dict) -> list:
@@ -152,15 +159,23 @@ async def start_apple(link: str, user: dict, options: dict = None):
             await edit_message(user['bot_msg'], f"❌ Error: {result['error']}")
             return
         
-        # Set poster message for albums
-        if result['type'] != 'track':
-            result['poster_msg'] = user['bot_msg']
-        
-        # Process and upload content
+        # Process and upload content based on type
         if result['type'] == 'track':
-            await track_upload(result['tracks'][0], user)
-        else:
-            await album_upload(result, user)
+            await track_upload(result['items'][0], user)
+        elif result['type'] == 'video':
+            await music_video_upload(result['items'][0], user)
+        elif result['type'] == 'album':
+            # For albums, we need to restructure the result
+            album_result = {
+                'success': True,
+                'type': 'album',
+                'tracks': result['items'],
+                'folderpath': result['folderpath'],
+                'title': result.get('album', result['title']),
+                'artist': result['artist'],
+                'poster_msg': user['bot_msg']
+            }
+            await album_upload(album_result, user)
         
         await edit_message(user['bot_msg'], "✅ Apple Music download completed!")
         
