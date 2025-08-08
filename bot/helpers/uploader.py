@@ -76,6 +76,7 @@ async def music_video_upload(metadata, user):
         base_path = Config.LOCAL_STORAGE
     
     if Config.UPLOAD_MODE == 'Telegram':
+        # FIX: Pass the entire metadata object as meta parameter
         await send_message(
             user,
             metadata['filepath'],
@@ -87,7 +88,8 @@ async def music_video_upload(metadata, user):
                     'artist': metadata['artist'],
                     'provider': metadata.get('provider', 'Apple Music')
                 }
-            )
+            ),
+            meta=metadata  # PASS METADATA HERE
         )
     elif Config.UPLOAD_MODE == 'Rclone':
         rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
