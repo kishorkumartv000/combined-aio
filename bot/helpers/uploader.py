@@ -10,6 +10,12 @@ from mutagen.mp4 import MP4
 import re
 
 async def track_upload(metadata, user):
+    """
+    Upload a single track
+    Args:
+        metadata: Track metadata
+        user: User details
+    """
     # Determine base path for different providers
     if "Apple Music" in metadata['filepath']:
         base_path = os.path.join(Config.LOCAL_STORAGE, "Apple Music")
@@ -22,8 +28,12 @@ async def track_upload(metadata, user):
             metadata['filepath'],
             'audio',
             caption=await format_string(
-                f"🎵 **{{title}}**\n👤 {{artist}}",
-                metadata
+                "🎵 **{title}**\n👤 {artist}\n🎧 {provider}",
+                {
+                    'title': metadata['title'],
+                    'artist': metadata['artist'],
+                    'provider': metadata.get('provider', 'Apple Music')
+                }
             ),
             meta={
                 'duration': metadata['duration'],
@@ -35,8 +45,13 @@ async def track_upload(metadata, user):
     elif Config.UPLOAD_MODE == 'Rclone':
         rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
         text = await format_string(
-            "🎵 **{title}**\n👤 {artist}\n🔗 [Direct Link]({r_link})",
-            {**metadata, 'r_link': rclone_link}
+            "🎵 **{title}**\n👤 {artist}\n🎧 {provider}\n🔗 [Direct Link]({r_link})",
+            {
+                'title': metadata['title'],
+                'artist': metadata['artist'],
+                'provider': metadata.get('provider', 'Apple Music'),
+                'r_link': rclone_link
+            }
         )
         if index_link:
             text += f"\n📁 [Index Link]({index_link})"
@@ -48,6 +63,12 @@ async def track_upload(metadata, user):
         os.remove(metadata['thumbnail'])
 
 async def album_upload(metadata, user):
+    """
+    Upload an album
+    Args:
+        metadata: Album metadata
+        user: User details
+    """
     # Determine base path for different providers
     if "Apple Music" in metadata['folderpath']:
         base_path = os.path.join(Config.LOCAL_STORAGE, "Apple Music")
@@ -56,30 +77,44 @@ async def album_upload(metadata, user):
     
     if Config.UPLOAD_MODE == 'Telegram':
         if Config.ALBUM_ZIP:
-            zip_path = await create_apple_zip(metadata['folderpath'], user['user_id'])
+            # Create descriptive zip file
+            zip_path = await create_apple_zip(
+                metadata['folderpath'], 
+                user['user_id'],
+                metadata
+            )
+            
+            # Create caption with provider info
+            caption = await format_string(
+                "💿 **{album}**\n👤 {artist}\n🎧 {provider}",
+                {
+                    'album': metadata['title'],
+                    'artist': metadata['artist'],
+                    'provider': metadata.get('provider', 'Apple Music')
+                }
+            )
+            
             await send_message(
                 user,
                 zip_path,
                 'doc',
-                caption=await format_string(
-                    "💿 **{album}**\n👤 {artist}",
-                    {
-                        'album': metadata['title'],
-                        'artist': metadata['artist']
-                    }
-                )
+                caption=caption
             )
+            
+            # Clean up zip file after upload
             os.remove(zip_path)
         else:
+            # Upload tracks individually
             for track in metadata['tracks']:
                 await track_upload(track, user)
     elif Config.UPLOAD_MODE == 'Rclone':
         rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
         text = await format_string(
-            "💿 **{album}**\n👤 {artist}\n🔗 [Direct Link]({r_link})",
+            "💿 **{album}**\n👤 {artist}\n🎧 {provider}\n🔗 [Direct Link]({r_link})",
             {
                 'album': metadata['title'],
                 'artist': metadata['artist'],
+                'provider': metadata.get('provider', 'Apple Music'),
                 'r_link': rclone_link
             }
         )
@@ -95,28 +130,144 @@ async def album_upload(metadata, user):
     shutil.rmtree(metadata['folderpath'])
 
 async def artist_upload(metadata, user):
-    """Placeholder for artist upload functionality"""
-    await send_message(
-        user,
-        f"🎤 Artist download would process: {metadata['title']}",
-        'text'
-    )
+    """
+    Upload an artist's content
+    Args:
+        metadata: Artist metadata
+        user: User details
+    """
+    # Determine base path for different providers
+    if "Apple Music" in metadata['folderpath']:
+        base_path = os.path.join(Config.LOCAL_STORAGE, "Apple Music")
+    else:
+        base_path = Config.LOCAL_STORAGE
+    
+    if Config.UPLOAD_MODE == 'Telegram':
+        if Config.ARTIST_ZIP:
+            # Create descriptive zip file
+            zip_path = await create_apple_zip(
+                metadata['folderpath'], 
+                user['user_id'],
+                metadata
+            )
+            
+            # Create caption with provider info
+            caption = await format_string(
+                "🎤 **{artist}**\n🎧 {provider} Discography",
+                {
+                    'artist': metadata['title'],
+                    'provider': metadata.get('provider', 'Apple Music')
+                }
+            )
+            
+            await send_message(
+                user,
+                zip_path,
+                'doc',
+                caption=caption
+            )
+            
+            # Clean up zip file after upload
+            os.remove(zip_path)
+        else:
+            # Upload albums individually
+            for album in metadata['albums']:
+                await album_upload(album, user)
+    elif Config.UPLOAD_MODE == 'Rclone':
+        rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
+        text = await format_string(
+            "🎤 **{artist}**\n🎧 {provider} Discography\n🔗 [Direct Link]({r_link})",
+            {
+                'artist': metadata['title'],
+                'provider': metadata.get('provider', 'Apple Music'),
+                'r_link': rclone_link
+            }
+        )
+        if index_link:
+            text += f"\n📁 [Index Link]({index_link})"
+        await send_message(user, text)
+    
+    # Cleanup
+    shutil.rmtree(metadata['folderpath'])
 
 async def playlist_upload(metadata, user):
-    """Placeholder for playlist upload functionality"""
-    await send_message(
-        user,
-        f"🎵 Playlist download would process: {metadata['title']}",
-        'text'
-    )
+    """
+    Upload a playlist
+    Args:
+        metadata: Playlist metadata
+        user: User details
+    """
+    # Determine base path for different providers
+    if "Apple Music" in metadata['folderpath']:
+        base_path = os.path.join(Config.LOCAL_STORAGE, "Apple Music")
+    else:
+        base_path = Config.LOCAL_STORAGE
+    
+    if Config.UPLOAD_MODE == 'Telegram':
+        if Config.PLAYLIST_ZIP:
+            # Create descriptive zip file
+            zip_path = await create_apple_zip(
+                metadata['folderpath'], 
+                user['user_id'],
+                metadata
+            )
+            
+            # Create caption with provider info
+            caption = await format_string(
+                "🎵 **{title}**\n👤 Curated by {artist}\n🎧 {provider} Playlist",
+                {
+                    'title': metadata['title'],
+                    'artist': metadata.get('artist', 'Various Artists'),
+                    'provider': metadata.get('provider', 'Apple Music')
+                }
+            )
+            
+            await send_message(
+                user,
+                zip_path,
+                'doc',
+                caption=caption
+            )
+            
+            # Clean up zip file after upload
+            os.remove(zip_path)
+        else:
+            # Upload tracks individually
+            for track in metadata['tracks']:
+                await track_upload(track, user)
+    elif Config.UPLOAD_MODE == 'Rclone':
+        rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
+        text = await format_string(
+            "🎵 **{title}**\n👤 Curated by {artist}\n🎧 {provider} Playlist\n🔗 [Direct Link]({r_link})",
+            {
+                'title': metadata['title'],
+                'artist': metadata.get('artist', 'Various Artists'),
+                'provider': metadata.get('provider', 'Apple Music'),
+                'r_link': rclone_link
+            }
+        )
+        if index_link:
+            text += f"\n📁 [Index Link]({index_link})"
+        await send_message(user, text)
+    
+    # Cleanup
+    shutil.rmtree(metadata['folderpath'])
 
 async def rclone_upload(user, path, base_path):
-    """Rclone upload implementation with proper path handling"""
-    # Skip RCLONE link generation if not configured
+    """
+    Upload files via Rclone
+    Args:
+        user: User details
+        path: Path to file/folder
+        base_path: Base directory path
+    Returns:
+        rclone_link, index_link
+    """
+    # Skip if not configured
     if not Config.RCLONE_DEST:
         return None, None
     
-    # Get relative path for Rclone
+    # Get relative path
     relative_path = str(path).replace(base_path, "").lstrip('/')
     
     rclone_link = None
