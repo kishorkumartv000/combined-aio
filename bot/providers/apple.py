@@ -39,15 +39,6 @@ class AppleMusicProvider:
         # Process options
         cmd_options = self.build_options(options)
         
-        # Add Apple-specific path options
-        alac_dir = os.path.join(user_dir, 'alac')
-        atmos_dir = os.path.join(user_dir, 'atmos')
-        os.makedirs(alac_dir, exist_ok=True)
-        os.makedirs(atmos_dir, exist_ok=True)
-        
-        cmd_options.extend(["--alac-save-folder", alac_dir])
-        cmd_options.extend(["--atmos-save-folder", atmos_dir])
-        
         # Update user message
         await edit_message(user['bot_msg'], "⏳ Starting Apple Music download...")
         
@@ -69,8 +60,6 @@ class AppleMusicProvider:
             # List directory contents for debugging
             try:
                 LOGGER.error(f"Directory contents: {os.listdir(user_dir)}")
-                LOGGER.error(f"alac dir contents: {os.listdir(alac_dir)}")
-                LOGGER.error(f"atmos dir contents: {os.listdir(atmos_dir)}")
             except Exception as e:
                 LOGGER.error(f"Error listing contents: {str(e)}")
             return {'success': False, 'error': "No files downloaded"}
