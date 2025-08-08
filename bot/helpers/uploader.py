@@ -62,6 +62,53 @@ async def track_upload(metadata, user):
     if metadata.get('thumbnail'):
         os.remove(metadata['thumbnail'])
 
+async def music_video_upload(metadata, user):
+    """
+    Upload a music video
+    Args:
+        metadata: Video metadata
+        user: User details
+    """
+    # Determine base path for different providers
+    if "Apple Music" in metadata['filepath']:
+        base_path = os.path.join(Config.LOCAL_STORAGE, "Apple Music")
+    else:
+        base_path = Config.LOCAL_STORAGE
+    
+    if Config.UPLOAD_MODE == 'Telegram':
+        await send_message(
+            user,
+            metadata['filepath'],
+            'video',
+            caption=await format_string(
+                "🎬 **{title}**\n👤 {artist}\n🎧 {provider} Music Video",
+                {
+                    'title': metadata['title'],
+                    'artist': metadata['artist'],
+                    'provider': metadata.get('provider', 'Apple Music')
+                }
+            )
+        )
+    elif Config.UPLOAD_MODE == 'Rclone':
+        rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
+        text = await format_string(
+            "🎬 **{title}**\n👤 {artist}\n🎧 {provider} Music Video\n🔗 [Direct Link]({r_link})",
+            {
+                'title': metadata['title'],
+                'artist': metadata['artist'],
+                'provider': metadata.get('provider', 'Apple Music'),
+                'r_link': rclone_link
+            }
+        )
+        if index_link:
+            text += f"\n📁 [Index Link]({index_link})"
+        await send_message(user, text)
+    
+    # Cleanup
+    os.remove(metadata['filepath'])
+    if metadata.get('thumbnail'):
+        os.remove(metadata['thumbnail'])
+
 async def album_upload(metadata, user):
     """
     Upload an album
