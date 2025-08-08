@@ -8,9 +8,10 @@ from bot.helpers.utils import (
     extract_apple_metadata,
     send_message,
     edit_message,
-    format_string
+    format_string,
+    cleanup
 )
-from bot.helpers.uploader import track_upload, album_upload, music_video_upload
+from bot.helpers.uploader import track_upload, album_upload, music_video_upload, artist_upload, playlist_upload
 from bot.helpers.database.pg_impl import download_history
 from config import Config
 from bot.logger import LOGGER
@@ -74,34 +75,57 @@ class AppleMusicProvider:
         # Extract metadata
         items = []
         for file_path in files:
-            metadata = await extract_apple_metadata(file_path)
-            metadata['filepath'] = file_path
-            metadata['provider'] = self.name
-            items.append(metadata)
-            LOGGER.info(f"Processed file: {file_path}")
+            try:
+                metadata = await extract_apple_metadata(file_path)
+                metadata['filepath'] = file_path
+                metadata['provider'] = self.name
+                items.append(metadata)
+                LOGGER.info(f"Processed file: {file_path}")
+            except Exception as e:
+                LOGGER.error(f"Metadata extraction failed for {file_path}: {str(e)}")
         
-        # Determine content type
-        is_video = any(f.endswith(('.mp4', '.m4v', '.mov')) for f in files)
+        # Handle case where no metadata was extracted
+        if not items:
+            LOGGER.error("No valid metadata extracted for any files")
+            return {'success': False, 'error': "Metadata extraction failed"}
         
-        if len(items) == 1:
-            content_type = 'video' if is_video else 'track'
-            folder_path = os.path.dirname(items[0]['filepath'])
+        # Determine content type based on file types
+        has_video = any(f.endswith(('.mp4', '.m4v', '.mov')) for f in files)
+        has_audio = any(f.endswith(('.m4a', '.flac', '.alac')) for f in files)
+        is_single = len(items) == 1
+        
+        if is_single:
+            if has_video:
+                content_type = 'video'
+                folder_path = os.path.dirname(items[0]['filepath'])
+            else:
+                content_type = 'track'
+                folder_path = os.path.dirname(items[0]['filepath'])
+        elif has_video and has_audio:
+            # Mixed content - treat as playlist
+            content_type = 'playlist'
+            folder_path = os.path.dirname(os.path.commonpath([i['filepath'] for i in items]))
+            LOGGER.warning(f"Mixed video/audio content detected. Treating as playlist: {folder_path}")
         else:
+            # Pure audio collection
             content_type = 'album'
-            folder_path = os.path.commonpath([os.path.dirname(t['filepath']) for t in items])
+            folder_path = os.path.dirname(os.path.commonpath([i['filepath'] for i in items]))
         
         # Record download in history
         content_id = self.extract_content_id(url)
-        quality = options.get('mv-max', Config.APPLE_ATMOS_QUALITY) if is_video else \
+        quality = options.get('mv-max', Config.APPLE_ATMOS_QUALITY) if has_video else \
                  options.get('alac-max', Config.APPLE_ALAC_QUALITY) if 'alac' in (options or {}) else \
                  options.get('atmos-max', Config.APPLE_ATMOS_QUALITY)
+        
+        # Use first item's title if album title is missing
+        album_title = items[0].get('album', items[0]['title'])
         
         download_history.record_download(
             user_id=user['user_id'],
             provider=self.name,
             content_type=content_type,
             content_id=content_id,
-            title=items[0]['title'],
+            title=album_title,
             artist=items[0]['artist'],
             quality=str(quality)  # Convert to string
         )
@@ -111,9 +135,9 @@ class AppleMusicProvider:
             'type': content_type,
             'items': items,
             'folderpath': folder_path,
-            'title': items[0]['title'],
+            'title': album_title,
             'artist': items[0]['artist'],
-            'album': items[0].get('album', '')
+            'poster_msg': user['bot_msg']
         }
     
     def build_options(self, options: dict) -> list:
@@ -165,20 +189,18 @@ async def start_apple(link: str, user: dict, options: dict = None):
         elif result['type'] == 'video':
             await music_video_upload(result['items'][0], user)
         elif result['type'] == 'album':
-            # For albums, we need to restructure the result
-            album_result = {
-                'success': True,
-                'type': 'album',
-                'tracks': result['items'],
-                'folderpath': result['folderpath'],
-                'title': result.get('album', result['title']),
-                'artist': result['artist'],
-                'poster_msg': user['bot_msg']
-            }
-            await album_upload(album_result, user)
+            await album_upload(result, user)
+        elif result['type'] == 'playlist':
+            await playlist_upload(result, user)
+        else:
+            await edit_message(user['bot_msg'], f"❌ Unsupported content type: {result['type']}")
+            return
         
+        # Final cleanup
+        await cleanup(user)
         await edit_message(user['bot_msg'], "✅ Apple Music download completed!")
         
     except Exception as e:
         logger.error(f"Apple Music error: {str(e)}", exc_info=True)
         await edit_message(user['bot_msg'], f"❌ Error: {str(e)}")
+        await cleanup(user)
