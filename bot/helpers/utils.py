@@ -460,7 +460,7 @@ async def run_apple_downloader(url: str, output_dir: str, options: list = None, 
         output_dir: User-specific directory to save files
         options: List of command-line options
         user: User details for progress updates
-        
+    
     Returns:
         dict: {'success': bool, 'error': str if failed}
     """
@@ -736,11 +736,20 @@ async def create_apple_zip(directory: str, user_id: int, metadata: dict) -> str:
     safe_name = re.sub(r'[\\/*?:"<>|]', "", content_name)
     safe_name = safe_name.replace(' ', '_')[:100]  # Limit length
     
+    # If name is empty after sanitization, use fallback
+    if not safe_name.strip():
+        safe_name = f"Apple_Music_{int(time.time())}"
+        LOGGER.warning(f"Empty content name after sanitization, using fallback: {safe_name}")
+    
     # Create descriptive filename based on content type
     if content_type.lower() == 'album':
         zip_name = f"[{provider}] {safe_name}"
     elif content_type.lower() == 'playlist':
         zip_name = f"[{provider}] {safe_name} (Playlist)"
+    elif content_type.lower() == 'artist':
+        zip_name = f"[{provider}] {safe_name} (Artist)"
+    elif content_type.lower() == 'video':
+        zip_name = f"[{provider}] {safe_name} (Video)"
     else:
         zip_name = f"[{provider}] {safe_name}"
     
