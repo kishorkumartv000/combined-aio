@@ -4,6 +4,7 @@ import re
 
 from pyrogram.types import Message
 from pyrogram.errors import MessageNotModified, FloodWait
+from pyrogram.enums import ParseMode
 
 from bot.tgclient import aio
 from bot.settings import bot_set
@@ -106,7 +107,8 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
                 text=item,
                 reply_to_message_id=user['r_id'],
                 reply_markup=markup,
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
+                parse_mode=ParseMode.HTML
             )
         elif itype == 'doc':
             msg = await aio.send_document(
@@ -173,7 +175,8 @@ async def edit_message(msg:Message, text, markup=None, antiflood=True):
         edited = await msg.edit_text(
             text=text,
             reply_markup=markup,
-            disable_web_page_preview=True
+            disable_web_page_preview=True,
+            parse_mode=ParseMode.HTML
         )
         return edited
     except MessageNotModified:
