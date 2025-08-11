@@ -498,14 +498,15 @@ async def run_apple_downloader(url: str, output_dir: str, options: list = None, 
     """
     # Create ALAC and Atmos subdirectories
     alac_dir = os.path.join(output_dir, "alac")
-atmos_dir = os.path.join(output_dir, "atmos")
-aac_dir = os.path.join(output_dir, "aac")
-os.makedirs(alac_dir, exist_ok=True)
-os.makedirs(atmos_dir, exist_ok=True)
-os.makedirs(aac_dir, exist_ok=True)
+    atmos_dir = os.path.join(output_dir, "atmos")
+    aac_dir = os.path.join(output_dir, "aac")
+    os.makedirs(alac_dir, exist_ok=True)
+    os.makedirs(atmos_dir, exist_ok=True)
+    os.makedirs(aac_dir, exist_ok=True)
 
     # Create config file with user-specific paths
-    config_path = os.path.join(output_dir, "config.yaml")
+    repo_dir = os.path.join(os.path.expanduser("~"), "amalac")
+    config_path = os.path.join(repo_dir, "config.yaml")
     
     # Dynamic configuration with user-specific paths
     config_content = f"""# Configuration for Apple Music downloader
@@ -593,6 +594,10 @@ aac-save-folder: {aac_dir}
                     process.kill()
                 except Exception:
                     pass
+            try:
+                os.remove(config_path)
+            except Exception:
+                pass
             return {'success': False, 'error': 'Cancelled'}
         chunk = await process.stdout.read(4096)  # Read 4KB chunks
         if not chunk:
@@ -678,8 +683,16 @@ aac-save-folder: {aac_dir}
     if process.returncode != 0:
         error = stderr or "\n".join(stdout_lines)
         LOGGER.error(f"Apple downloader failed: {error}")
+        try:
+            os.remove(config_path)
+        except Exception:
+            pass
         return {'success': False, 'error': error}
     
+    try:
+        os.remove(config_path)
+    except Exception:
+        pass
     return {'success': True}
 
 
