@@ -458,7 +458,7 @@ async def cleanup(user=None, metadata=None):
             LOGGER.info(f"Temp dir cleanup error: {str(e)}")
 
 # Apple Music specific utilities
-async def run_apple_downloader(url: str, output_dir: str, options: list = None, user: dict = None) -> dict:
+async def run_apple_downloader(url: str, output_dir: str, options: list = None, user: dict = None, progress=None) -> dict:
     """
     Execute Apple Music downloader script with config file setup
     
@@ -467,6 +467,7 @@ async def run_apple_downloader(url: str, output_dir: str, options: list = None, 
         output_dir: User-specific directory to save files
         options: List of command-line options
         user: User details for progress updates
+        progress: Optional ProgressReporter for rich progress updates
     
     Returns:
         dict: {'success': bool, 'error': str if failed}
@@ -540,6 +541,9 @@ atmos-save-folder: {atmos_dir}
     
     # Read output in chunks to avoid buffer overrun
     stdout_chunks = []
+    stage_set = False
+    last_scan = 0.0
+    media_exts = ('.m4a', '.flac', '.alac', '.mp4', '.m4v', '.mov')
     while True:
         chunk = await process.stdout.read(4096)  # Read 4KB chunks
         if not chunk:
@@ -548,17 +552,50 @@ atmos-save-folder: {atmos_dir}
         
         # Process chunk for progress updates
         chunk_str = chunk.decode(errors='ignore')
-        if user and 'bot_msg' in user:
-            # Look for progress in the chunk
+        if progress:
+            # Look for X/Y total pattern
+            try:
+                xy = re.search(r"(\d+)\s*/\s*(\d+)", chunk_str)
+                if xy:
+                    total = int(xy.group(2))
+                    await progress.set_total_tracks(total)
+            except Exception:
+                pass
+            
+            # Look for percent
+            pct_match = re.search(r'(\d+)%', chunk_str)
+            if pct_match:
+                try:
+                    pct = int(pct_match.group(1))
+                    if not stage_set:
+                        await progress.set_stage("Downloading")
+                        stage_set = True
+                    tracks_done = None
+                    now = time.monotonic()
+                    if (now - last_scan) > 2.0:
+                        last_scan = now
+                        try:
+                            count = 0
+                            for root, _, files in os.walk(output_dir):
+                                for f in files:
+                                    if f.lower().endswith(media_exts):
+                                        count += 1
+                            tracks_done = count
+                        except Exception:
+                            tracks_done = None
+                    await progress.update_download(percent=pct, tracks_done=tracks_done)
+                except Exception:
+                    pass
+        elif user and 'bot_msg' in user:
             progress_match = re.search(r'(\d+)%', chunk_str)
             if progress_match:
                 try:
-                    progress = int(progress_match.group(1))
+                    pct = int(progress_match.group(1))
                     await edit_message(
                         user['bot_msg'],
-                        f"Apple Music Download: {progress}%"
+                        f"Apple Music Download: {pct}%"
                     )
-                except:
+                except Exception:
                     pass
     
     # Combine all chunks
@@ -572,6 +609,13 @@ atmos-save-folder: {atmos_dir}
     # Wait for process to finish
     stderr = await process.stderr.read()
     stderr = stderr.decode().strip()
+    
+    # Move to processing stage
+    try:
+        if progress:
+            await progress.set_stage("Processing")
+    except Exception:
+        pass
     
     # Check return code
     if process.returncode != 0:

@@ -43,12 +43,15 @@ class AppleMusicProvider:
         
         # Process options
         cmd_options = self.build_options(options)
-        
-        # Update user message
-        await edit_message(user['bot_msg'], "⏳ Starting Apple Music download...")
+
+        # Initialize progress reporter
+        from bot.helpers.progress import ProgressReporter
+        reporter = ProgressReporter(user['bot_msg'], label="Apple Music")
+        user['progress'] = reporter
+        await reporter.set_stage("Preparing")
         
         # Download content
-        result = await run_apple_downloader(url, user_dir, cmd_options, user)
+        result = await run_apple_downloader(url, user_dir, cmd_options, user, progress=reporter)
         if not result['success']:
             LOGGER.error(f"Apple downloader failed: {result['error']}")
             return result
@@ -88,6 +91,13 @@ class AppleMusicProvider:
         if not items:
             LOGGER.error("No valid metadata extracted for any files")
             return {'success': False, 'error': "Metadata extraction failed"}
+        
+        # Update progress with total tracks
+        try:
+            await user['progress'].set_total_tracks(len(items))
+            await user['progress'].update_download(tracks_done=len(items))
+        except Exception:
+            pass
         
         # Determine content type based on file types
         has_video = any(f.endswith(('.mp4', '.m4v', '.mov')) for f in files)
@@ -197,10 +207,20 @@ async def start_apple(link: str, user: dict, options: dict = None):
             return
         
         # Final cleanup
+        try:
+            await user['progress'].set_stage("Finalizing")
+        except Exception:
+            pass
         await cleanup(user)
-        await edit_message(user['bot_msg'], "✅ Apple Music download completed!")
+        try:
+            await user['progress'].set_stage("Done")
+        except Exception:
+            await edit_message(user['bot_msg'], "✅ Apple Music download completed!")
         
     except Exception as e:
         logger.error(f"Apple Music error: {str(e)}", exc_info=True)
-        await edit_message(user['bot_msg'], f"❌ Error: {str(e)}")
+        try:
+            await user.get('progress', None).set_stage("Done")
+        except Exception:
+            await edit_message(user['bot_msg'], f"❌ Error: {str(e)}")
         await cleanup(user)

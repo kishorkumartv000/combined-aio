@@ -9,13 +9,16 @@ from mutagen import File
 from mutagen.mp4 import MP4
 import re
 from bot.settings import bot_set
+from bot.helpers.progress import ProgressReporter
 
-async def track_upload(metadata, user):
+async def track_upload(metadata, user, index: int = None, total: int = None):
     """
     Upload a single track
     Args:
         metadata: Track metadata
         user: User details
+        index: Optional file index for progress display
+        total: Optional total files for progress display
     """
     # Determine base path for different providers
     if "Apple Music" in metadata['filepath']:
@@ -24,6 +27,9 @@ async def track_upload(metadata, user):
         base_path = Config.LOCAL_STORAGE
     
     if Config.UPLOAD_MODE == 'Telegram':
+        reporter = user.get('progress')
+        if reporter:
+            await reporter.set_stage("Uploading")
         await send_message(
             user,
             metadata['filepath'],
@@ -41,7 +47,11 @@ async def track_upload(metadata, user):
                 'artist': metadata['artist'],
                 'title': metadata['title'],
                 'thumbnail': metadata['thumbnail']
-            }
+            },
+            progress_reporter=reporter,
+            progress_label="Uploading",
+            file_index=index,
+            total_files=total
         )
     elif Config.UPLOAD_MODE == 'Rclone':
         rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
@@ -77,6 +87,9 @@ async def music_video_upload(metadata, user):
         base_path = Config.LOCAL_STORAGE
     
     if Config.UPLOAD_MODE == 'Telegram':
+        reporter = user.get('progress')
+        if reporter:
+            await reporter.set_stage("Uploading")
         # FIX: Pass the entire metadata object as meta parameter
         await send_message(
             user,
@@ -90,7 +103,11 @@ async def music_video_upload(metadata, user):
                     'provider': metadata.get('provider', 'Apple Music')
                 }
             ),
-            meta=metadata  # PASS METADATA HERE
+            meta=metadata,  # PASS METADATA HERE
+            progress_reporter=reporter,
+            progress_label="Uploading",
+            file_index=1,
+            total_files=1
         )
     elif Config.UPLOAD_MODE == 'Rclone':
         rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
@@ -126,12 +143,14 @@ async def album_upload(metadata, user):
         base_path = Config.LOCAL_STORAGE
     
     if Config.UPLOAD_MODE == 'Telegram':
+        reporter = user.get('progress')
         if Config.ALBUM_ZIP:
             # Create descriptive zip file
             zip_path = await create_apple_zip(
                 metadata['folderpath'], 
                 user['user_id'],
-                metadata
+                metadata,
+                progress=reporter
             )
             
             # Create caption with provider info
@@ -148,15 +167,21 @@ async def album_upload(metadata, user):
                 user,
                 zip_path,
                 'doc',
-                caption=caption
+                caption=caption,
+                progress_reporter=reporter,
+                progress_label="Uploading",
+                file_index=1,
+                total_files=1
             )
             
             # Clean up zip file after upload
             os.remove(zip_path)
         else:
             # Upload tracks individually
-            for track in metadata['tracks']:
-                await track_upload(track, user)
+            tracks = metadata.get('tracks', [])
+            total_tracks = len(tracks)
+            for idx, track in enumerate(tracks, start=1):
+                await track_upload(track, user, index=idx, total=total_tracks)
     elif Config.UPLOAD_MODE == 'Rclone':
         rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
         text = await format_string(
@@ -193,12 +218,14 @@ async def artist_upload(metadata, user):
         base_path = Config.LOCAL_STORAGE
     
     if Config.UPLOAD_MODE == 'Telegram':
+        reporter = user.get('progress')
         if Config.ARTIST_ZIP:
             # Create descriptive zip file
             zip_path = await create_apple_zip(
                 metadata['folderpath'], 
                 user['user_id'],
-                metadata
+                metadata,
+                progress=reporter
             )
             
             # Create caption with provider info
@@ -214,7 +241,11 @@ async def artist_upload(metadata, user):
                 user,
                 zip_path,
                 'doc',
-                caption=caption
+                caption=caption,
+                progress_reporter=reporter,
+                progress_label="Uploading",
+                file_index=1,
+                total_files=1
             )
             
             # Clean up zip file after upload
@@ -254,12 +285,14 @@ async def playlist_upload(metadata, user):
         base_path = Config.LOCAL_STORAGE
     
     if Config.UPLOAD_MODE == 'Telegram':
+        reporter = user.get('progress')
         if Config.PLAYLIST_ZIP:
             # Create descriptive zip file
             zip_path = await create_apple_zip(
                 metadata['folderpath'], 
                 user['user_id'],
-                metadata
+                metadata,
+                progress=reporter
             )
             
             # Create caption with provider info
@@ -276,15 +309,21 @@ async def playlist_upload(metadata, user):
                 user,
                 zip_path,
                 'doc',
-                caption=caption
+                caption=caption,
+                progress_reporter=reporter,
+                progress_label="Uploading",
+                file_index=1,
+                total_files=1
             )
             
             # Clean up zip file after upload
             os.remove(zip_path)
         else:
             # Upload tracks individually
-            for track in metadata['tracks']:
-                await track_upload(track, user)
+            tracks = metadata.get('tracks', [])
+            total_tracks = len(tracks)
+            for idx, track in enumerate(tracks, start=1):
+                await track_upload(track, user, index=idx, total=total_tracks)
     elif Config.UPLOAD_MODE == 'Rclone':
         rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
         text = await format_string(
