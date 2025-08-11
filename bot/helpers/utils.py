@@ -16,6 +16,8 @@ from urllib.parse import quote
 from aiohttp import ClientTimeout
 from concurrent.futures import ThreadPoolExecutor
 from pyrogram.errors import FloodWait
+from typing import Optional
+from .progress import ProgressReporter
 
 # Import Config for Apple Music settings
 from config import Config
@@ -768,7 +770,7 @@ def default_metadata(file_path):
     }
 
 
-async def create_apple_zip(directory: str, user_id: int, metadata: dict) -> str:
+async def create_apple_zip(directory: str, user_id: int, metadata: dict, progress: Optional[ProgressReporter] = None) -> str:
     """
     Create zip file with descriptive name for downloads
     Args:
@@ -814,13 +816,28 @@ async def create_apple_zip(directory: str, user_id: int, metadata: dict) -> str:
         zip_path = os.path.join(zip_dir, f"{zip_name}_{counter}.zip")
         counter += 1
     
+    # Initialize progress
+    if progress:
+        await progress.set_stage("Zipping")
+    
+    # Count total files to zip
+    total_files = 0
+    for root, _, files in os.walk(directory):
+        total_files += len(files)
+    if progress and total_files:
+        await progress.update_zip(0, total_files)
+    
     # Create the zip file
+    done_files = 0
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, _, files in os.walk(directory):
             for file in files:
                 file_path = os.path.join(root, file)
                 arcname = os.path.relpath(file_path, directory)
                 zipf.write(file_path, arcname)
+                done_files += 1
+                if progress:
+                    await progress.update_zip(done_files, total_files)
     
     LOGGER.info(f"Created descriptive zip: {zip_path}")
     return zip_path
