@@ -9,6 +9,7 @@ echo "Apple Music tracks in ALAC and Atmos formats with cloud sync capability"
 # Configuration
 ALAC_DIR="$HOME/Music/Apple Music/alac"
 ATMOS_DIR="$HOME/Music/Apple Music/atmos"
+AAC_DIR="$HOME/Music/Apple Music/aac"
 RCLONE_CONF_DIR="$HOME/.config/rclone"
 RCLONE_CONF="$RCLONE_CONF_DIR/rclone.conf"
 BENTO4_TEMP="/tmp/Bento4"
@@ -134,17 +135,23 @@ fi
 
 # Create output directories
 echo "Creating output directories..."
-mkdir -p "$ALAC_DIR" "$ATMOS_DIR"
+mkdir -p "$ALAC_DIR" "$ATMOS_DIR" "$AAC_DIR"
 
 # Configure download paths
 cd "$HOME/amalac"
 if [ -f "config.yaml" ]; then
     sed -i "s|alac-save-folder: .*|alac-save-folder: $ALAC_DIR|" config.yaml
     sed -i "s|atmos-save-folder: .*|atmos-save-folder: $ATMOS_DIR|" config.yaml
+    if grep -q "^aac-save-folder:" config.yaml; then
+        sed -i "s|aac-save-folder: .*|aac-save-folder: $AAC_DIR|" config.yaml
+    else
+        echo "aac-save-folder: $AAC_DIR" >> config.yaml
+    fi
     echo "Updated config.yaml with local paths"
 else
     echo "alac-save-folder: $ALAC_DIR" > config.yaml
     echo "atmos-save-folder: $ATMOS_DIR" >> config.yaml
+    echo "aac-save-folder: $AAC_DIR" >> config.yaml
     echo "Created config.yaml with local paths"
 fi
 
