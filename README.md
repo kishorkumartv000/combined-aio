@@ -175,6 +175,7 @@ These commands work in any chat where the bot is present. Copy-paste directly in
 - /help: Show available commands
 - /settings: Open settings panel
 - /download <url> [--options]: Start a download for a supported provider
+This build is Apple Music–only. Qobuz, Tidal, and Deezer integrations have been removed. Use Apple Music links like `https://music.apple.com/...`.
   - Examples:
     - ```
 /download https://music.apple.com/…
