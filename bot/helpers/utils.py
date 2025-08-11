@@ -498,10 +498,12 @@ async def run_apple_downloader(url: str, output_dir: str, options: list = None, 
     """
     # Create ALAC and Atmos subdirectories
     alac_dir = os.path.join(output_dir, "alac")
-    atmos_dir = os.path.join(output_dir, "atmos")
-    os.makedirs(alac_dir, exist_ok=True)
-    os.makedirs(atmos_dir, exist_ok=True)
-    
+atmos_dir = os.path.join(output_dir, "atmos")
+aac_dir = os.path.join(output_dir, "aac")
+os.makedirs(alac_dir, exist_ok=True)
+os.makedirs(atmos_dir, exist_ok=True)
+os.makedirs(aac_dir, exist_ok=True)
+
     # Create config file with user-specific paths
     config_path = os.path.join(output_dir, "config.yaml")
     
@@ -540,6 +542,7 @@ mv-max: 2160
 # USER-SPECIFIC PATHS:
 alac-save-folder: {alac_dir}
 atmos-save-folder: {atmos_dir}
+aac-save-folder: {aac_dir}
 """
     
     with open(config_path, 'w') as config_file:
