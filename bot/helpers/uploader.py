@@ -8,6 +8,7 @@ from bot.logger import LOGGER
 from mutagen import File
 from mutagen.mp4 import MP4
 import re
+from bot.settings import bot_set
 
 async def track_upload(metadata, user):
     """
@@ -18,7 +19,7 @@ async def track_upload(metadata, user):
     """
     # Determine base path for different providers
     if "Apple Music" in metadata['filepath']:
-        base_path = os.path.join(Config.LOCAL_STORAGE, "Apple Music")
+        base_path = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
     else:
         base_path = Config.LOCAL_STORAGE
     
@@ -71,7 +72,7 @@ async def music_video_upload(metadata, user):
     """
     # Determine base path for different providers
     if "Apple Music" in metadata['filepath']:
-        base_path = os.path.join(Config.LOCAL_STORAGE, "Apple Music")
+        base_path = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
     else:
         base_path = Config.LOCAL_STORAGE
     
@@ -120,7 +121,7 @@ async def album_upload(metadata, user):
     """
     # Determine base path for different providers
     if "Apple Music" in metadata['folderpath']:
-        base_path = os.path.join(Config.LOCAL_STORAGE, "Apple Music")
+        base_path = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
     else:
         base_path = Config.LOCAL_STORAGE
     
@@ -187,7 +188,7 @@ async def artist_upload(metadata, user):
     """
     # Determine base path for different providers
     if "Apple Music" in metadata['folderpath']:
-        base_path = os.path.join(Config.LOCAL_STORAGE, "Apple Music")
+        base_path = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
     else:
         base_path = Config.LOCAL_STORAGE
     
@@ -248,7 +249,7 @@ async def playlist_upload(metadata, user):
     """
     # Determine base path for different providers
     if "Apple Music" in metadata['folderpath']:
-        base_path = os.path.join(Config.LOCAL_STORAGE, "Apple Music")
+        base_path = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
     else:
         base_path = Config.LOCAL_STORAGE
     
