@@ -78,13 +78,24 @@ async def antiSpam(uid=None, cid=None, revoke=False) -> bool:
         return False
 
 
-async def send_message(user, item, itype='text', caption=None, markup=None, chat_id=None, meta=None):
+async def send_message(user, item, itype='text', caption=None, markup=None, chat_id=None, meta=None, progress_reporter=None, progress_label=None, file_index=None, total_files=None):
     if not isinstance(user, dict):
         user = await fetch_user_details(user)
     chat_id = chat_id if chat_id else user['chat_id']
     
     # Initialize msg to prevent UnboundLocalError
     msg = None
+
+    # Progress callback wrapper for uploads
+    def _make_progress_cb(label=None, index=None, total=None):
+        def _cb(current, total_bytes):
+            if progress_reporter:
+                try:
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(progress_reporter.update_upload(current, total_bytes, file_index=index, file_total=total, label=label or 'Uploading'))
+                except Exception:
+                    pass
+        return _cb
 
     try:
         if itype == 'text':
@@ -100,7 +111,8 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
                 chat_id=chat_id,
                 document=item,
                 caption=caption,
-                reply_to_message_id=user['r_id']
+                reply_to_message_id=user['r_id'],
+                progress=_make_progress_cb(progress_label, file_index, total_files) if progress_reporter else None
             )
         elif itype == 'audio':
             # SAFE METADATA ACCESS WITH DEFAULTS
@@ -117,7 +129,8 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
                 performer=artist,
                 title=title,
                 thumb=thumbnail,
-                reply_to_message_id=user['r_id']
+                reply_to_message_id=user['r_id'],
+                progress=_make_progress_cb(progress_label, file_index, total_files) if progress_reporter else None
             )
         elif itype == 'video':  # Added video type support
             # SAFE METADATA ACCESS WITH DEFAULTS
@@ -134,7 +147,8 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
                 width=width,
                 height=height,
                 thumb=thumbnail,
-                reply_to_message_id=user['r_id']
+                reply_to_message_id=user['r_id'],
+                progress=_make_progress_cb(progress_label, file_index, total_files) if progress_reporter else None
             )
         elif itype == 'pic':
             msg = await aio.send_photo(
@@ -145,7 +159,7 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
             )
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        return await send_message(user, item, itype, caption, markup, chat_id, meta)
+        return await send_message(user, item, itype, caption, markup, chat_id, meta, progress_reporter, progress_label, file_index, total_files)
     except Exception as e:
         LOGGER.error(f"Error sending message: {str(e)}")
     
