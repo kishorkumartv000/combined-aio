@@ -46,12 +46,21 @@ class AppleMusicProvider:
 
         # Initialize progress reporter
         from bot.helpers.progress import ProgressReporter
-        reporter = ProgressReporter(user['bot_msg'], label="Apple Music")
+        label = f"Apple Music • ID:{user.get('task_id','?')}"
+        reporter = ProgressReporter(user['bot_msg'], label=label)
         user['progress'] = reporter
         await reporter.set_stage("Preparing")
         
         # Download content
-        result = await run_apple_downloader(url, user_dir, cmd_options, user, progress=reporter)
+        result = await run_apple_downloader(
+            url,
+            user_dir,
+            cmd_options,
+            user,
+            progress=reporter,
+            task_id=user.get('task_id'),
+            cancel_event=user.get('cancel_event')
+        )
         if not result['success']:
             LOGGER.error(f"Apple downloader failed: {result['error']}")
             return result
@@ -217,6 +226,13 @@ async def start_apple(link: str, user: dict, options: dict = None):
         except Exception:
             await edit_message(user['bot_msg'], "✅ Apple Music download completed!")
         
+    except asyncio.CancelledError:
+        try:
+            await edit_message(user['bot_msg'], "⏹️ Task cancelled. Cleaning up…")
+        except Exception:
+            pass
+        await cleanup(user)
+        raise
     except Exception as e:
         logger.error(f"Apple Music error: {str(e)}", exc_info=True)
         try:

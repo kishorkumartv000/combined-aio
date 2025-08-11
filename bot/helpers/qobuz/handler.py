@@ -114,7 +114,7 @@ async def start_track(item_id:int, user:dict, track_meta:dict | None, upload=Tru
     filepath = sanitize_filepath(filepath)
     track_meta['filepath'] = filepath
 
-    err = await download_file(url, filepath)
+    err = await download_file(url, filepath, cancel_event=user.get('cancel_event'))
     if err:
         return await send_message(user, err)
     

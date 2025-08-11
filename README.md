@@ -166,3 +166,42 @@ TON - `UQBBPkWSnbMWXrM6P-pb96wYxQzLjZ2hhuYfsO-N2pVmznCG`
 - Credentials are only used to start the setup process and are not stored by the bot.
 - You can cancel the flow any time by sending `/cancel`.
 - If 2FA prompt does not appear (rare), setup continues and completes automatically.
+
+## Commands and Usage
+
+These commands work in any chat where the bot is present. Copy-paste directly into Telegram.
+
+- /start: Show welcome message
+- /help: Show available commands
+- /settings: Open settings panel
+- /download <url> [--options]: Start a download for a supported provider
+  - Examples:
+    - ```
+/download https://music.apple.com/…
+    ```
+    - ```
+/download --alac-max 192000 https://music.apple.com/…
+    ```
+    - Reply to a message containing the link and send:
+      ```
+/download --atmos
+      ```
+  - On start, the bot replies with a Task ID. Use it to manage the task.
+- /cancel <task_id>: Cancel a specific running task by its ID
+  - Example:
+    ```
+/cancel ab12cd34
+    ```
+- /cancel_all: Cancel all your running tasks (download, zipping, uploading)
+  - Example:
+    ```
+/cancel_all
+    ```
+
+### What happens on cancel
+- The bot stops the active step (downloading, zipping, uploading)
+- Any partial files/archives are cleaned up automatically
+- The progress message is updated to indicate cancellation
+
+### Realtime system usage in progress
+- Progress messages now include CPU, RAM, and Disk usage to help monitor server load while tasks run.

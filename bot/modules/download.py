@@ -1,3 +1,4 @@
+import asyncio
 from pyrogram.types import Message
 from pyrogram import Client, filters
 
@@ -43,10 +44,17 @@ async def download_track(c, msg: Message):
         if not spam:
             user = await fetch_user_details(msg, reply)
             user['link'] = link
-            user['bot_msg'] = await send_message(msg, 'Starting download...')
+            # Create task state
+            from bot.helpers.tasks import task_manager
+            state = await task_manager.create(user, label="Download")
+            user['task_id'] = state.task_id
+            user['cancel_event'] = state.cancel_event
+            user['bot_msg'] = await send_message(msg, f"Starting download…\nID: `{state.task_id}`\nUse /cancel {state.task_id} to stop.")
             try:
                 await start_link(link, user, options)
                 await send_message(user, lang.s.TASK_COMPLETED)
+            except asyncio.CancelledError:
+                await send_message(user, "⏹️ Task cancelled")
             except Exception as e:
                 LOGGER.error(f"Download failed: {e}")
                 # USE SAFE ERROR MESSAGING
@@ -54,6 +62,7 @@ async def download_track(c, msg: Message):
                 await send_message(user, error_msg)
             await c.delete_messages(msg.chat.id, user['bot_msg'].id)
             await cleanup(user)  # deletes uploaded files
+            await task_manager.finish(state.task_id, status="cancelled" if state.cancel_event.is_set() else "done")
             await antiSpam(msg.from_user.id, msg.chat.id, True)
 
 

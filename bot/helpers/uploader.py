@@ -51,7 +51,8 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
             progress_reporter=reporter,
             progress_label="Uploading",
             file_index=index,
-            total_files=total
+            total_files=total,
+            cancel_event=user.get('cancel_event')
         )
     elif Config.UPLOAD_MODE == 'Rclone':
         rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
@@ -107,7 +108,8 @@ async def music_video_upload(metadata, user):
             progress_reporter=reporter,
             progress_label="Uploading",
             file_index=1,
-            total_files=1
+            total_files=1,
+            cancel_event=user.get('cancel_event')
         )
     elif Config.UPLOAD_MODE == 'Rclone':
         rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
