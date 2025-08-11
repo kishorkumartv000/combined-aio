@@ -161,29 +161,3 @@ def apple_button(formats):
     ])
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data="providerPanel")])
     return InlineKeyboardMarkup(buttons)
-
-# Apple-only build: remove tidal panels
-def tidal_buttons():
-    return InlineKeyboardMarkup(main_button + close_button)
-
-def tidal_auth_buttons():
-    return InlineKeyboardMarkup(main_button + close_button)
-
-# Qobuz qualities
-def qb_button(qualities:dict):
-    inline_keyboard = []
-    for quality in qualities.values():
-        inline_keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text=quality,
-                    callback_data=f"qbQ_{quality.replace('✅', '')}"
-                )
-            ]
-        )
-    inline_keyboard += main_button + close_button
-    return InlineKeyboardMarkup(inline_keyboard)
-
-def tidal_quality_button(qualities:dict):
-    # Apple-only build: no tidal quality controls
-    return InlineKeyboardMarkup(main_button + close_button)
