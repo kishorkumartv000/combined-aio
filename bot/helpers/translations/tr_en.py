@@ -35,18 +35,7 @@ class EN(object):
     CORE_PANEL = 'Edit main settings here'
     PROVIDERS_PANEL = 'Configure each platform seperartelty'
 
-    TIDAL_PANEL = "Configure Tidal settings here"
-    TIDAL_AUTH_PANEL = """
-Manage auth of Tidal Account here
-
-<b>Account :</b> <code>{}</code>
-<b>Mobile HiRes :</b> <code>{}</code>
-<b>Mobile Atmos :</b> <code>{}</code>
-<b>TV/Auto : </b> <code>{}</code>
-"""
-    TIDAL_AUTH_URL = "Go to the below link for loggin in\n{}"
-    TIDAL_AUTH_SUCCESSFULL = 'Succesfully logged in Tidal'
-    TIDAL_REMOVED_SESSION = 'Successfully removed all sessions for Tidal'
+    
 
     TELEGRAM_PANEL = """
 <b>Telegram Settings</b>
@@ -76,9 +65,7 @@ Auth Chats : {4}
     TELEGRAM = 'Telegram'
     CORE = 'CORE'
     
-    QOBUZ = 'Qobuz'
-    DEEZER = 'Deezer'
-    TIDAL = 'Tidal'
+
 
     BOT_PUBLIC = 'Bot Public - {}'
     BOT_LANGUAGE = 'Language'
@@ -96,11 +83,9 @@ Auth Chats : {4}
     ARTIST_ZIP = 'Zip Artist : {}'
     ALBUM_ZIP = 'Zip Album : {}'
 
-    QOBUZ_QUALITY_PANEL = '<b>Edit Qobuz Quality Here</b>'
 
-    TIDAL_LOGIN_TV = 'Login TV'
-    TIDAL_REMOVE_LOGIN = "Remove Login"
-    TIDAL_REFRESH_SESSION = 'Refresh Auth'
+
+
 
     RCLONE_LINK = 'Direct Link'
     INDEX_LINK = 'Index Link'
@@ -111,15 +96,14 @@ Auth Chats : {4}
 #----------------
     ERR_NO_LINK = 'No link found :('
     ERR_LINK_RECOGNITION = "Sorry, couldn't recognise the given link."
-    ERR_QOBUZ_NOT_STREAMABLE = "This track/album is not available to download."
-    ERR_QOBUZ_NOT_AVAILABLE = "This track is not available in your region"
-    ERR_LOGIN_TIDAL_TV_FAILED = "Login failed : {}"
+
+
 #----------------
 #
 # ERRORS
 #
 #----------------
-    WARNING_NO_TIDAL_TOKEN = 'No TV/Auto token-secret added'
+
 #----------------
 #
 # TRACK & ALBUM POSTS

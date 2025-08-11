@@ -32,18 +32,7 @@ class TR(object):
     CORE_PANEL = 'Ana ayarları buradan düzenleyin'
     PROVIDERS_PANEL = 'Her platformu ayrı ayrı yapılandırın'
 
-    TIDAL_PANEL = "Tidal ayarlarını burada yapılandırın"
-    TIDAL_AUTH_PANEL = """
-Tidal Hesap yetkisini burada yönetin
-
-<b>Hesap :</b> <code>{}</code>
-<b>Mobil HiRes :</b> <code>{}</code>
-<b>Mobil Atmos :</b> <code>{}</code>
-<b>TV/Auto : </b> <code>{}</code>
-"""
-    TIDAL_AUTH_URL = "Giriş yapmak için aşağıdaki bağlantıya gidin\n{}"
-    TIDAL_AUTH_SUCCESSFULL = 'Tidal\'a başarıyla giriş yapıldı'
-    TIDAL_REMOVED_SESSION = 'Tidal için tüm oturumlar başarıyla kaldırıldı'
+    
 
     TELEGRAM_PANEL = """
 <b>Telegram Ayarları</b>
@@ -69,9 +58,7 @@ Yetkili Sohbetler : {4}
     TELEGRAM = 'Telegram'
     CORE = 'ÇEKİRDEK'
     
-    QOBUZ = 'Qobuz'
-    DEEZER = 'Deezer'
-    TIDAL = 'Tidal'
+
 
     BOT_PUBLIC = 'Bot Herkese Açık - {}'
     BOT_LANGUAGE = 'Dil'
@@ -89,11 +76,9 @@ Yetkili Sohbetler : {4}
     ARTIST_ZIP = 'Sanatçı Arşivle : {}'
     ALBUM_ZIP = 'Albüm Arşivle : {}'
 
-    QOBUZ_QUALITY_PANEL = '<b>Qobuz Kalitesini Buradan Düzenle</b>'
 
-    TIDAL_LOGIN_TV = 'TV Girişi'
-    TIDAL_REMOVE_LOGIN = "Girişi Kaldır"
-    TIDAL_REFRESH_SESSION = 'Yetkilendirmeyi Yenile'
+
+
 
     RCLONE_LINK = 'Doğrudan Bağlantı'
     INDEX_LINK = 'Dizin Bağlantısı'
@@ -105,16 +90,15 @@ Yetkili Sohbetler : {4}
 #----------------
     ERR_NO_LINK = 'Bağlantı bulunamadı :('
     ERR_LINK_RECOGNITION = "Üzgünüm, verilen bağlantı tanınamadı."
-    ERR_QOBUZ_NOT_STREAMABLE = "Bu parça/album indirilemiyor."
-    ERR_QOBUZ_NOT_AVAILABLE = "Bu parça sizin bölgenizde mevcut değil"
-    ERR_LOGIN_TIDAL_TV_FAILED = "Giriş başarısız oldu : {}"
+
+
 
 #----------------
 #
 # UYARILAR
 #
 #----------------
-    WARNING_NO_TIDAL_TOKEN = 'Hiçbir TV/Auto token-secret eklenmedi'
+
 
 #----------------
 #
