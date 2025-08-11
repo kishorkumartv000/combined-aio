@@ -482,86 +482,31 @@ async def cleanup(user=None, metadata=None):
 # Apple Music specific utilities
 async def run_apple_downloader(url: str, output_dir: str, options: list = None, user: dict = None, progress=None, task_id: str | None = None, cancel_event: asyncio.Event | None = None) -> dict:
     """
-    Execute Apple Music downloader script with config file setup
-    
+    Execute Apple Music downloader script.
+
     Args:
         url: Apple Music URL to download
-        output_dir: User-specific directory to save files
+        output_dir: Unused for Apple (kept for interface compatibility)
         options: List of command-line options
         user: User details for progress updates
         progress: Optional ProgressReporter for rich progress updates
         task_id: Optional task id to register subprocess for cancellation
         cancel_event: Optional cancellation event to cooperatively stop
-    
+
     Returns:
         dict: {'success': bool, 'error': str if failed}
     """
-    # Create ALAC and Atmos subdirectories
-    alac_dir = os.path.join(output_dir, "alac")
-atmos_dir = os.path.join(output_dir, "atmos")
-aac_dir = os.path.join(output_dir, "aac")
-os.makedirs(alac_dir, exist_ok=True)
-os.makedirs(atmos_dir, exist_ok=True)
-os.makedirs(aac_dir, exist_ok=True)
-
-    # Create config file with user-specific paths
-    config_path = os.path.join(output_dir, "config.yaml")
-    
-    # Dynamic configuration with user-specific paths
-    config_content = f"""# Configuration for Apple Music downloader
-lrc-type: "lyrics"
-lrc-format: "lrc"
-embed-lrc: true
-save-lrc-file: true
-save-artist-cover: true
-save-animated-artwork: false
-emby-animated-artwork: false
-embed-cover: true
-cover-size: 5000x5000
-cover-format: original
-max-memory-limit: 256
-decrypt-m3u8-port: "127.0.0.1:10020"
-get-m3u8-port: "127.0.0.1:20020"
-get-m3u8-from-device: true
-get-m3u8-mode: hires
-aac-type: aac-lc
-alac-max: {Config.APPLE_ALAC_QUALITY}
-atmos-max: {Config.APPLE_ATMOS_QUALITY}
-limit-max: 200
-album-folder-format: "{{AlbumName}}"
-playlist-folder-format: "{{PlaylistName}}"
-song-file-format: "{{SongNumer}}. {{SongName}}"
-artist-folder-format: "{{UrlArtistName}}"
-explicit-choice : "[E]"
-clean-choice : "[C]"
-apple-master-choice : "[M]"
-use-songinfo-for-playlist: false
-dl-albumcover-for-playlist: false
-mv-audio-type: atmos
-mv-max: 2160
-# USER-SPECIFIC PATHS:
-alac-save-folder: {alac_dir}
-atmos-save-folder: {atmos_dir}
-aac-save-folder: {aac_dir}
-"""
-    
-    with open(config_path, 'w') as config_file:
-        config_file.write(config_content)
-    
-    LOGGER.info(f"Created Apple Music config at: {config_path}")
-    
-    # Build command with user-specific options
+    # Build command with options
     cmd = [Config.DOWNLOADER_PATH]
     if options:
         cmd.extend(options)
     cmd.append(url)
-    
-    LOGGER.info(f"Running Apple downloader: {' '.join(cmd)} in {output_dir}")
-    
+
+    LOGGER.info(f"Running Apple downloader: {' '.join(cmd)}")
+
     # Run the command
     process = await asyncio.create_subprocess_exec(
         *cmd,
-        cwd=output_dir,  # Set working directory to user folder
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
@@ -573,12 +518,10 @@ aac-save-folder: {aac_dir}
             await task_manager.register_subprocess(task_id, process)
     except Exception:
         pass
-    
+
     # Read output in chunks to avoid buffer overrun
     stdout_chunks = []
     stage_set = False
-    last_scan = 0.0
-    media_exts = ('.m4a', '.flac', '.alac', '.mp4', '.m4v', '.mov')
     while True:
         # Early cancel check
         if cancel_event and cancel_event.is_set():
@@ -598,7 +541,7 @@ aac-save-folder: {aac_dir}
         if not chunk:
             break
         stdout_chunks.append(chunk)
-        
+
         # Process chunk for progress updates
         chunk_str = chunk.decode(errors='ignore')
         if progress:
@@ -610,7 +553,7 @@ aac-save-folder: {aac_dir}
                     await progress.set_total_tracks(total)
             except Exception:
                 pass
-            
+
             # Look for percent
             pct_match = re.search(r'(\d+)%', chunk_str)
             if pct_match:
@@ -619,20 +562,7 @@ aac-save-folder: {aac_dir}
                     if not stage_set:
                         await progress.set_stage("Downloading")
                         stage_set = True
-                    tracks_done = None
-                    now = time.monotonic()
-                    if (now - last_scan) > 2.0:
-                        last_scan = now
-                        try:
-                            count = 0
-                            for root, _, files in os.walk(output_dir):
-                                for f in files:
-                                    if f.lower().endswith(media_exts):
-                                        count += 1
-                            tracks_done = count
-                        except Exception:
-                            tracks_done = None
-                    await progress.update_download(percent=pct, tracks_done=tracks_done)
+                    await progress.update_download(percent=pct)
                 except Exception:
                     pass
         elif user and 'bot_msg' in user:
@@ -646,15 +576,15 @@ aac-save-folder: {aac_dir}
                     )
                 except Exception:
                     pass
-    
+
     # Combine all chunks
     stdout_output = b''.join(stdout_chunks).decode(errors='ignore')
     stdout_lines = stdout_output.splitlines()
-    
+
     # Log all output lines
     for line in stdout_lines:
         LOGGER.debug(f"Apple Downloader: {line}")
-    
+
     # Wait for process to finish
     stderr = await process.stderr.read()
     stderr = stderr.decode().strip()
@@ -666,20 +596,20 @@ aac-save-folder: {aac_dir}
             await task_manager.clear_subprocess(task_id)
     except Exception:
         pass
-    
+
     # Move to processing stage
     try:
         if progress:
             await progress.set_stage("Processing")
     except Exception:
         pass
-    
+
     # Check return code
     if process.returncode != 0:
         error = stderr or "\n".join(stdout_lines)
         LOGGER.error(f"Apple downloader failed: {error}")
         return {'success': False, 'error': error}
-    
+
     return {'success': True}
 
 
@@ -909,3 +839,73 @@ async def create_apple_zip(directory: str, user_id: int, metadata: dict, progres
     
     LOGGER.info(f"Created descriptive zip: {zip_path}")
     return zip_path
+
+
+def _read_apple_config_paths(config_path: str | None = None) -> dict:
+    """Read $HOME/amalac/config.yaml and return paths for alac/atmos/aac.
+    Falls back to standard Apple Music directories under $HOME if not found.
+    """
+    try:
+        home_dir = os.path.expanduser("~")
+        cfg_path = config_path or os.path.join(home_dir, "amalac", "config.yaml")
+        alac_dir = os.path.join(home_dir, "Music", "Apple Music", "alac")
+        atmos_dir = os.path.join(home_dir, "Music", "Apple Music", "atmos")
+        aac_dir = os.path.join(home_dir, "Music", "Apple Music", "aac")
+        if os.path.exists(cfg_path):
+            with open(cfg_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if line.lower().startswith('alac-save-folder:'):
+                        alac_dir = line.split(':', 1)[1].strip()
+                    elif line.lower().startswith('atmos-save-folder:'):
+                        atmos_dir = line.split(':', 1)[1].strip()
+                    elif line.lower().startswith('aac-save-folder:'):
+                        aac_dir = line.split(':', 1)[1].strip()
+        return {
+            'alac': os.path.expanduser(alac_dir),
+            'atmos': os.path.expanduser(atmos_dir),
+            'aac': os.path.expanduser(aac_dir),
+        }
+    except Exception as e:
+        LOGGER.error(f"Failed to read Apple config paths: {str(e)}")
+        return {}
+
+
+def list_apple_output_files(extensions: tuple[str, ...] | None = None) -> list[str]:
+    """List files from global Apple Music output directories defined in config.yaml."""
+    exts = extensions or ('.m4a', '.flac', '.alac', '.mp4', '.m4v', '.mov')
+    paths = _read_apple_config_paths()
+    files: list[str] = []
+    for key in ('alac', 'atmos', 'aac'):
+        base = paths.get(key)
+        if not base:
+            continue
+        for root, _, filenames in os.walk(base):
+            for file in filenames:
+                if file.lower().endswith(exts):
+                    files.append(os.path.join(root, file))
+    return files
+
+
+def cleanup_apple_global():
+    """Delete contents inside the alac/atmos/aac folders from the global Apple Music directory."""
+    try:
+        paths = _read_apple_config_paths()
+        for key in ('alac', 'atmos', 'aac'):
+            folder = paths.get(key)
+            if not folder or not os.path.isdir(folder):
+                continue
+            for entry in os.listdir(folder):
+                full_path = os.path.join(folder, entry)
+                try:
+                    if os.path.isdir(full_path):
+                        shutil.rmtree(full_path, ignore_errors=True)
+                    else:
+                        os.remove(full_path)
+                except Exception:
+                    continue
+        LOGGER.info("Apple global folders cleaned (contents deleted)")
+    except Exception as e:
+        LOGGER.error(f"Failed to clean Apple global folders: {str(e)}")

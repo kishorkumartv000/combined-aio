@@ -9,7 +9,9 @@ from bot.helpers.utils import (
     send_message,
     edit_message,
     format_string,
-    cleanup
+    cleanup,
+    list_apple_output_files,
+    cleanup_apple_global
 )
 from bot.helpers.uploader import track_upload, album_upload, music_video_upload, artist_upload, playlist_upload
 from bot.helpers.database.pg_impl import download_history
@@ -65,24 +67,14 @@ class AppleMusicProvider:
             LOGGER.error(f"Apple downloader failed: {result['error']}")
             return result
         
-        # Find downloaded files
-        files = []
-        for root, _, filenames in os.walk(user_dir):
-            for file in filenames:
-                file_path = os.path.join(root, file)
-                # Collect all relevant files
-                if file.endswith(('.m4a', '.flac', '.alac', '.mp4', '.m4v', '.mov')):
-                    files.append(file_path)
+        # Find downloaded files from global Apple folders (alac/atmos/aac)
+        files = list_apple_output_files()
         
         if not files:
-            LOGGER.error(f"No files found in: {user_dir}")
-            try:
-                LOGGER.error(f"Directory contents: {os.listdir(user_dir)}")
-            except Exception as e:
-                LOGGER.error(f"Error listing contents: {str(e)}")
+            LOGGER.error("No files found in global Apple output folders")
             return {'success': False, 'error': "No files downloaded"}
         
-        LOGGER.info(f"Found {len(files)} files in {user_dir}")
+        LOGGER.info(f"Found {len(files)} files in global Apple output folders")
         
         # Extract metadata
         items = []
@@ -221,6 +213,8 @@ async def start_apple(link: str, user: dict, options: dict = None):
         except Exception:
             pass
         await cleanup(user)
+        # Clean only the contents of global Apple output folders
+        cleanup_apple_global()
         try:
             await user['progress'].set_stage("Done")
         except Exception:
