@@ -7,7 +7,11 @@ from bot.helpers.message import send_message, check_user, fetch_user_details
 from bot.settings import bot_set
 
 
-@Client.on_message(filters.command(["cancel", f"cancel@{bot_set.bot_username}"]))
+cancel_cmds = ["cancel"]
+if bot_set.bot_username:
+    cancel_cmds.append(f"cancel@{bot_set.bot_username}")
+
+@Client.on_message(filters.command(cancel_cmds))
 async def cancel_task(c, msg: Message):
     if not await check_user(msg=msg):
         return
@@ -22,7 +26,11 @@ async def cancel_task(c, msg: Message):
         await send_message(msg, f"❓ Task ID not found: {task_id}")
 
 
-@Client.on_message(filters.command(["cancel_all", f"cancel_all@{bot_set.bot_username}"]))
+cancel_all_cmds = ["cancel_all"]
+if bot_set.bot_username:
+    cancel_all_cmds.append(f"cancel_all@{bot_set.bot_username}")
+
+@Client.on_message(filters.command(cancel_all_cmds))
 async def cancel_all_tasks(c, msg: Message):
     if not await check_user(msg=msg):
         return
