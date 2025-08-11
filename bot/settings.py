@@ -42,6 +42,7 @@ class BotSettings:
         self.can_enable_tidal = Config.ENABLE_TIDAL and Config.ENABLE_TIDAL.lower() == "true"
         self.admins = Config.ADMINS
         self.apple = None  # Apple Music settings placeholder
+        self.bot_username = (Config.BOT_USERNAME or "").lstrip("@")
 
         self.set_language()
 
