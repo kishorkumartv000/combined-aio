@@ -44,31 +44,8 @@ class Config:
     RCLONE_DEST       = getenv("RCLONE_DEST")                              # e.g. "remote:AppleMusic"
     INDEX_LINK        = getenv("INDEX_LINK")                               # Optional index base URL
 
-    # Qobuz Configuration
-    QOBUZ_EMAIL       = getenv("QOBUZ_EMAIL")                              # User email (string)
-    QOBUZ_PASSWORD    = getenv("QOBUZ_PASSWORD")                           # Password (string)
-    QOBUZ_USER        = int(getenv("QOBUZ_USER", 0))                       # User ID (int)
-    QOBUZ_TOKEN       = getenv("QOBUZ_TOKEN")                              # Auth token (string)
-    QOBUZ_QUALITY     = int(getenv("QOBUZ_QUALITY", 0))                    # 5, 6, 7, or 27
 
-    # Deezer Configuration
-    DEEZER_EMAIL      = getenv("DEEZER_EMAIL")                             # User email
-    DEEZER_PASSWORD   = getenv("DEEZER_PASSWORD")                          # Password
-    DEEZER_BF_SECRET  = getenv("DEEZER_BF_SECRET")                         # Secret token
-    DEEZER_ARL        = getenv("DEEZER_ARL")                               # ARL cookie
 
-    # Tidal Configuration
-    ENABLE_TIDAL           = getenv("ENABLE_TIDAL", "False")              # True or False
-    TIDAL_MOBILE           = getenv("TIDAL_MOBILE", "False")              # True or False
-    TIDAL_MOBILE_TOKEN     = getenv("TIDAL_MOBILE_TOKEN")                 # Mobile token
-    TIDAL_ATMOS_MOBILE_TOKEN = getenv("TIDAL_ATMOS_MOBILE_TOKEN")         # Atmos mobile token
-    TIDAL_TV_TOKEN         = getenv("TIDAL_TV_TOKEN")                     # TV token
-    TIDAL_TV_SECRET        = getenv("TIDAL_TV_SECRET")                    # TV secret
-    TIDAL_CONVERT_M4A      = getenv("TIDAL_CONVERT_M4A", "False")         # True or False
-    TIDAL_REFRESH_TOKEN    = getenv("TIDAL_REFRESH_TOKEN")                # Refresh token
-    TIDAL_COUNTRY_CODE     = getenv("TIDAL_COUNTRY_CODE", "US")           # ISO country code (e.g. "US")
-    TIDAL_QUALITY          = getenv("TIDAL_QUALITY")                      # LOW, HIGH, LOSSLESS, HI_RES
-    TIDAL_SPATIAL          = getenv("TIDAL_SPATIAL")                      # OFF, ATMOS AC3 JOC, ATMOS AC4, Sony 360RA
 
     # Concurrent Workers
     MAX_WORKERS      = int(getenv("MAX_WORKERS", 5))                       # Number of threads (int)

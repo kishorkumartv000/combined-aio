@@ -107,19 +107,6 @@ sudo docker run -d --env-file .env --name siesta project-siesta
 - `MAX_WORKERS` - Multithreading limit (kind of more speed) `(int)`
 - `TRACK_NAME_FORMAT` - Naming format for tracks (check [metadata](https://github.com/vinayak-7-0-3/Project-Siesta/blob/2bbea8572d660a92bb182a360e91791583f4523b/bot/helpers/metadata.py#L16) section for tags supported) `(str)`
 - `PLAYLIST_NAME_FORMAT` - Similar to `TRACK_NAME_FORMAT` but for Playlists (Note: all tags might not be available) `(str)`
-- `QOBUZ_EMAIL` - Email ID for logging into Qobuz `(str)`
-- `QOBUZ_PASSWORD` - Password for logging into Qobuz `(str)`
-- `QOBUZ_USER` - User ID for Qobuz (either use Email or this) `(int)`
-- `QOBUZ_TOKEN` - User token for Qobuz (either use password or this) `(str)`
-- `ENABLE_TIDAL` - To enable the Tidal module - True/False `(bool)`
-- `TIDAL_MOBILE` - To enable Tidal Mobile sessions - True/False `(bool)`
-- `TIDAL_MOBILE_TOKEN` - HiRes Mobile token for Tidal `(str)`
-- `TIDAL_ATMOS_MOBILE_TOKEN` - Atmos Mobile token for Tidal `(str)`
-- `TIDAL_TV_TOKEN` - TV/Auto Token for Tidal `(str)`
-- `TIDAL_TV_SECRET` - TV/Auto Token for Tidal `(str)`
-- `TIDAL_CONVERT_M4A` - Convert the MAX quality tracks to FLAC `(bool)`
-- `TIDAL_REFRESH_TOKEN` - Refresh token for login (this overrides every other login)
-- `TIDAL_COUNTRY_CODE` - ISO country codes (in uppercase). Only needed when using Refresh Token. 
 
 ## CREDITS
 - OrpheusDL - https://github.com/yarrm80s/orpheusdl

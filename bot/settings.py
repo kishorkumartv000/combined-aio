@@ -35,9 +35,6 @@ def __decrypt_string__(string):
 class BotSettings:
     def __init__(self):
         # Apple-only build: remove other providers
-        self.deezer = False
-        self.qobuz = False
-        self.can_enable_tidal = False
         self.admins = Config.ADMINS
         self.apple = None  # Apple Music settings placeholder
         self.bot_username = (Config.BOT_USERNAME or "").lstrip("@")
@@ -119,19 +116,6 @@ class BotSettings:
                 LOGGER.info("Apple Music downloader installed successfully")
             except Exception as e:
                 LOGGER.error(f"Apple Music installer failed: {str(e)}")
-
-    # Apple-only build: remove other providers' login flows
-    async def login_qobuz(self):
-        return
-
-    async def login_deezer(self):
-        return
-
-    async def login_tidal(self):
-        return
-
-    async def save_tidal_login(self, session):
-        return
 
     def set_language(self):
         """Set bot language"""
