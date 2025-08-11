@@ -9,7 +9,7 @@ from bot.logger import LOGGER
 
 
 class ProgressReporter:
-    def __init__(self, msg, label: str = "Apple Music", min_interval_seconds: float = 2.0):
+    def __init__(self, msg, label: str = "Apple Music", min_interval_seconds: float = 2.0, show_system_stats: bool = True):
         self.msg = msg
         self.label = label
         self.stage: str = "Preparing"
@@ -29,6 +29,7 @@ class ProgressReporter:
         self._last_update: float = 0.0
         self._min_interval: float = min_interval_seconds
         self._lock = asyncio.Lock()
+        self._show_system_stats = show_system_stats
 
     def _make_bar(self, percent: int) -> str:
         blocks = 10
@@ -95,6 +96,23 @@ class ProgressReporter:
             "Done": "✅",
         }
         lines.append(f"{stage_emoji.get(self.stage, '🔄')} {self.label} • {self.stage}")
+
+        # Optional system stats line
+        if self._show_system_stats:
+            try:
+                import psutil, shutil, os
+                cpu = psutil.cpu_percent(interval=None)
+                mem = psutil.virtual_memory()
+                mem_used = int(mem.used / (1024**3))
+                mem_total = int(mem.total / (1024**3))
+                # Choose storage path; fallback to current cwd
+                base = os.getenv("LOCAL_STORAGE") or os.getcwd()
+                du = shutil.disk_usage(base)
+                disk_used = int(du.used / (1024**3))
+                disk_total = int(du.total / (1024**3))
+                lines.append(f"🖥️ CPU {cpu}% • RAM {mem_used}/{mem_total} GB • Disk {disk_used}/{disk_total} GB")
+            except Exception:
+                pass
 
         # Download section
         if self.stage in ("Downloading", "Processing") or self.download_percent > 0 or self.tracks_done > 0:

@@ -58,6 +58,7 @@ async def start_track(item_id: int, user: dict, track_meta: dict | None, upload=
     filepath += f"/{filename}.{track_meta['extension']}"
     track_meta['filepath'] = filepath = sanitize_filepath(filepath)
 
+    # deezerapi.dl_track currently does not support cancel_event; left as-is
     await deezerapi.dl_track(item_id, url, track_meta['filepath'])
 
     await set_metadata(track_meta)

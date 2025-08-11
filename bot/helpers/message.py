@@ -78,7 +78,7 @@ async def antiSpam(uid=None, cid=None, revoke=False) -> bool:
         return False
 
 
-async def send_message(user, item, itype='text', caption=None, markup=None, chat_id=None, meta=None, progress_reporter=None, progress_label=None, file_index=None, total_files=None):
+async def send_message(user, item, itype='text', caption=None, markup=None, chat_id=None, meta=None, progress_reporter=None, progress_label=None, file_index=None, total_files=None, cancel_event: asyncio.Event | None = None):
     if not isinstance(user, dict):
         user = await fetch_user_details(user)
     chat_id = chat_id if chat_id else user['chat_id']
@@ -89,6 +89,8 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
     # Progress callback wrapper for uploads
     def _make_progress_cb(label=None, index=None, total=None):
         def _cb(current, total_bytes):
+            if cancel_event and cancel_event.is_set():
+                raise RuntimeError("Cancelled")
             if progress_reporter:
                 try:
                     loop = asyncio.get_event_loop()

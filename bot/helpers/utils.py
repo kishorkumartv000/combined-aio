@@ -30,14 +30,15 @@ from .message import send_message, edit_message
 
 MAX_SIZE = 1.9 * 1024 * 1024 * 1024  # 2GB
 
-async def download_file(url, path, retries=3, timeout=30):
+async def download_file(url, path, retries=3, timeout=30, cancel_event: asyncio.Event | None = None):
     """
-    Download a file with retry logic and timeout
+    Download a file with retry logic, timeout, and cooperative cancellation
     Args:
         url (str): URL to download
         path (str): Full path to save the file
         retries (int): Number of retry attempts
         timeout (int): Timeout in seconds
+        cancel_event: Optional asyncio.Event to signal cancellation
     Returns:
         str or None: Error message if failed, else None
     """
@@ -45,11 +46,30 @@ async def download_file(url, path, retries=3, timeout=30):
     
     for attempt in range(1, retries + 1):
         try:
+            if cancel_event and cancel_event.is_set():
+                # Clean partial file if any
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except Exception:
+                    pass
+                return "Cancelled"
             async with aiohttp.ClientSession(timeout=ClientTimeout(total=timeout)) as session:
                 async with session.get(url) as response:
                     if response.status == 200:
                         with open(path, 'wb') as f:
                             async for chunk in response.content.iter_chunked(1024 * 4):
+                                if cancel_event and cancel_event.is_set():
+                                    try:
+                                        f.close()
+                                    except Exception:
+                                        pass
+                                    try:
+                                        if os.path.exists(path):
+                                            os.remove(path)
+                                    except Exception:
+                                        pass
+                                    return "Cancelled"
                                 f.write(chunk)
                         return None
                     else:
@@ -460,7 +480,7 @@ async def cleanup(user=None, metadata=None):
             LOGGER.info(f"Temp dir cleanup error: {str(e)}")
 
 # Apple Music specific utilities
-async def run_apple_downloader(url: str, output_dir: str, options: list = None, user: dict = None, progress=None) -> dict:
+async def run_apple_downloader(url: str, output_dir: str, options: list = None, user: dict = None, progress=None, task_id: str | None = None, cancel_event: asyncio.Event | None = None) -> dict:
     """
     Execute Apple Music downloader script with config file setup
     
@@ -470,6 +490,8 @@ async def run_apple_downloader(url: str, output_dir: str, options: list = None, 
         options: List of command-line options
         user: User details for progress updates
         progress: Optional ProgressReporter for rich progress updates
+        task_id: Optional task id to register subprocess for cancellation
+        cancel_event: Optional cancellation event to cooperatively stop
     
     Returns:
         dict: {'success': bool, 'error': str if failed}
@@ -540,6 +562,14 @@ atmos-save-folder: {atmos_dir}
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
+
+    # Register subprocess for external cancellation
+    try:
+        if task_id:
+            from bot.helpers.tasks import task_manager
+            await task_manager.register_subprocess(task_id, process)
+    except Exception:
+        pass
     
     # Read output in chunks to avoid buffer overrun
     stdout_chunks = []
@@ -547,6 +577,20 @@ atmos-save-folder: {atmos_dir}
     last_scan = 0.0
     media_exts = ('.m4a', '.flac', '.alac', '.mp4', '.m4v', '.mov')
     while True:
+        # Early cancel check
+        if cancel_event and cancel_event.is_set():
+            try:
+                process.terminate()
+            except Exception:
+                pass
+            try:
+                await asyncio.wait_for(process.wait(), timeout=3)
+            except Exception:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
+            return {'success': False, 'error': 'Cancelled'}
         chunk = await process.stdout.read(4096)  # Read 4KB chunks
         if not chunk:
             break
@@ -611,6 +655,14 @@ atmos-save-folder: {atmos_dir}
     # Wait for process to finish
     stderr = await process.stderr.read()
     stderr = stderr.decode().strip()
+
+    # Clear subprocess registration
+    try:
+        if task_id:
+            from bot.helpers.tasks import task_manager
+            await task_manager.clear_subprocess(task_id)
+    except Exception:
+        pass
     
     # Move to processing stage
     try:
@@ -770,7 +822,7 @@ def default_metadata(file_path):
     }
 
 
-async def create_apple_zip(directory: str, user_id: int, metadata: dict, progress: Optional[ProgressReporter] = None) -> str:
+async def create_apple_zip(directory: str, user_id: int, metadata: dict, progress: Optional[ProgressReporter] = None, cancel_event: asyncio.Event | None = None) -> str:
     """
     Create zip file with descriptive name for downloads
     Args:
@@ -829,15 +881,28 @@ async def create_apple_zip(directory: str, user_id: int, metadata: dict, progres
     
     # Create the zip file
     done_files = 0
+    cancelled = False
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, _, files in os.walk(directory):
             for file in files:
+                if cancel_event and cancel_event.is_set():
+                    cancelled = True
+                    break
                 file_path = os.path.join(root, file)
                 arcname = os.path.relpath(file_path, directory)
                 zipf.write(file_path, arcname)
                 done_files += 1
                 if progress:
                     await progress.update_zip(done_files, total_files)
+            if cancelled:
+                break
+    if cancelled:
+        try:
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+        except Exception:
+            pass
+        raise asyncio.CancelledError()
     
     LOGGER.info(f"Created descriptive zip: {zip_path}")
     return zip_path

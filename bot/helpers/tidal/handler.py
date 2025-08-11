@@ -86,14 +86,14 @@ async def start_track(track_id:int, user:dict, track_meta:dict | None, \
             temp_files = []
             for url in urls[0]:
                 temp_path = f"{filepath}.{i}"
-                err = await download_file(url, temp_path)
+                err = await download_file(url, temp_path, cancel_event=user.get('cancel_event'))
                 if err:
                     return await send_message(user, err)
                 i+=1
                 temp_files.append(temp_path)
             await merge_tracks(temp_files, filepath)
         else:
-            err = await download_file(urls, filepath)
+            err = await download_file(urls, filepath, cancel_event=user.get('cancel_event'))
             if err:
                 return await send_message(user, err)
 
