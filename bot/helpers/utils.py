@@ -429,9 +429,16 @@ async def cleanup(user=None, metadata=None):
     if user:
         try:
             # Clean up Apple Music directory
-            apple_dir = os.path.join(Config.LOCAL_STORAGE, "Apple Music", str(user['user_id']))
+            apple_dir = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
             if os.path.exists(apple_dir):
                 shutil.rmtree(apple_dir, ignore_errors=True)
+                # Remove parent user directory if now empty
+                user_dir = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']))
+                try:
+                    if os.path.isdir(user_dir) and not os.listdir(user_dir):
+                        os.rmdir(user_dir)
+                except Exception:
+                    pass
         except Exception as e:
             LOGGER.info(f"Apple cleanup error: {str(e)}")
         
