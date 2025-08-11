@@ -7,8 +7,11 @@ from ..settings import bot_set
 from ..helpers.translations import lang_available
 from ..helpers.buttons.settings import *
 from ..helpers.database.pg_impl import set_db
-from ..helpers.message import edit_message, check_user
-
+from ..helpers.message import edit_message, check_user, send_message, fetch_user_details
+from ..helpers.state import conversation_state
+from config import Config
+import asyncio
+import os
 
 
 @Client.on_callback_query(filters.regex(pattern=r"^tgPanel"))
@@ -77,3 +80,99 @@ async def set_language_cb(client, cb:CallbackQuery):
             await language_panel_cb(client, cb)
         except:
             pass
+
+
+@Client.on_message(filters.text & ~filters.command(["start", "settings", "download", "auth", "ban", "log", "cancel"]))
+async def handle_text_input(c: Client, msg: Message):
+    state = await conversation_state.get(msg.from_user.id)
+    if not state:
+        return
+
+    stage = state.get("stage")
+    data = state.get("data", {})
+
+    if stage == "apple_setup_username":
+        await conversation_state.update(msg.from_user.id, stage="apple_setup_password", username=msg.text.strip())
+        await send_message(msg, "Now send your Apple ID password. You can cancel with /cancel")
+        return
+
+    if stage == "apple_setup_password":
+        await conversation_state.update(msg.from_user.id, stage="apple_setup_running", password=msg.text.strip())
+        await send_message(msg, "Running setup... If 2FA is required, I'll ask for it.")
+        # Start the setup process and monitor for 2FA
+        asyncio.create_task(_run_wrapper_setup_flow(c, msg))
+        return
+
+    if stage == "apple_setup_need_2fa":
+        code = msg.text.strip()
+        await conversation_state.update(msg.from_user.id, stage="apple_setup_running", twofa=code)
+        await send_message(msg, "Received 2FA code. Continuing...")
+        # Signal the running process to consume 2FA code
+        _pending = data.get("_pending_2fa")
+        if _pending and not _pending.done():
+            _pending.set_result(code)
+        return
+
+@Client.on_message(filters.command(["cancel"]))
+async def cancel_flow(c: Client, msg: Message):
+    await conversation_state.clear(msg.from_user.id)
+    await send_message(msg, "Cancelled current operation.")
+
+async def _run_wrapper_setup_flow(c: Client, msg: Message):
+    user_id = msg.from_user.id
+    state = await conversation_state.get(user_id)
+    if not state:
+        return
+    data = state.get("data", {})
+    username = data.get("username")
+    password = data.get("password")
+
+    try:
+        # Launch the setup script with environment vars
+        proc = await asyncio.create_subprocess_exec(
+            "/bin/bash", Config.APPLE_WRAPPER_SETUP_PATH,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            stdin=asyncio.subprocess.PIPE,
+            env={**os.environ, "USERNAME": username, "PASSWORD": password},
+        )
+
+        pending_2fa_future = None  # type: asyncio.Future | None
+        buffer = ""
+        while True:
+            chunk = await proc.stdout.read(1024)
+            if not chunk:
+                break
+            text = chunk.decode(errors='ignore')
+            buffer += text
+            # Detect 2FA prompt in output
+            if "2FA" in text or "2fa" in text or "2FA code" in text:
+                if not pending_2fa_future:
+                    pending_2fa_future = asyncio.get_event_loop().create_future()
+                    await conversation_state.update(user_id, stage="apple_setup_need_2fa", _pending_2fa=pending_2fa_future)
+                    await send_message(msg, "Please send your 2FA code.")
+                    # Wait for user to respond, with timeout
+                    try:
+                        code = await asyncio.wait_for(pending_2fa_future, timeout=180)
+                    except asyncio.TimeoutError:
+                        await send_message(msg, "2FA timed out. Cancelling setup.")
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+                        await conversation_state.clear(user_id)
+                        return
+                    # Write code to process stdin with newline
+                    if proc.stdin is not None:
+                        proc.stdin.write((code + "\n").encode())
+                        await proc.stdin.drain()
+
+        rc = await proc.wait()
+        if rc == 0:
+            await send_message(msg, "✅ Wrapper setup completed.")
+        else:
+            await send_message(msg, f"❌ Wrapper setup failed. Exit code {rc}.\n\nOutput:\n{buffer[-2000:]}")
+    except Exception as e:
+        await send_message(msg, f"❌ Error running setup: {e}")
+    finally:
+        await conversation_state.clear(user_id)
