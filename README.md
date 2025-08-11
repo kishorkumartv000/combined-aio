@@ -131,3 +131,38 @@ sudo docker run -d --env-file .env --name siesta project-siesta
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I7FWQZ4)
 
 TON - `UQBBPkWSnbMWXrM6P-pb96wYxQzLjZ2hhuYfsO-N2pVmznCG`
+
+## Apple Wrapper Controls (Apple Music)
+
+- **Location**: `Settings -> Providers -> Apple Music`
+- **Buttons**:
+  - `🧩 Setup Wrapper`: Starts an interactive setup that asks for your Apple ID username and password, then runs the wrapper setup script with those credentials. If 2FA is required, the bot will detect it and prompt you to send the 2FA code, then continues automatically.
+  - `⏹️ Stop Wrapper`: Stops any running wrapper process. Includes a confirmation step to prevent accidental taps.
+
+### How Setup Works
+1. Tap `🧩 Setup Wrapper`.
+2. Send your Apple ID username when asked.
+3. Send your Apple ID password when asked.
+4. The bot runs the setup script with `USERNAME` and `PASSWORD` exported in the environment, equivalent to:
+   ```bash
+   USERNAME="your_username" PASSWORD="your_password" /usr/src/app/downloader/setup_wrapper.sh
+   ```
+5. If the wrapper requests 2FA, you will see a prompt. Send the 2FA code as a normal message within 3 minutes.
+6. On success, you'll get a confirmation. On failure, the last part of the script output is shown for debugging.
+
+### How Stop Works
+- Tap `⏹️ Stop Wrapper` -> Confirm. The bot runs:
+  ```bash
+  /usr/src/app/downloader/stop_wrapper.sh
+  ```
+- It kills wrapper processes and frees ports 10020/20020.
+
+### Configuration
+- Override script paths with env vars if needed:
+  - `APPLE_WRAPPER_SETUP_PATH` (default `/usr/src/app/downloader/setup_wrapper.sh`)
+  - `APPLE_WRAPPER_STOP_PATH` (default `/usr/src/app/downloader/stop_wrapper.sh`)
+
+### Notes & Security
+- Credentials are only used to start the setup process and are not stored by the bot.
+- You can cancel the flow any time by sending `/cancel`.
+- If 2FA prompt does not appear (rare), setup continues and completes automatically.

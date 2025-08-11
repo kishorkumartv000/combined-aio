@@ -63,6 +63,7 @@ async def apple_cb(c, cb: CallbackQuery):
         await edit_message(
             cb.message,
             "🍎 **Apple Music Settings**\n\n"
+            "Use the buttons below to configure formats, quality, and manage the Wrapper service.\n\n"
             "**Available Formats:**\n"
             "- ALAC: Apple Lossless Audio Codec\n"
             "- Dolby Atmos: Spatial audio experience\n\n"
@@ -117,6 +118,50 @@ async def apple_set_quality_cb(c, cb: CallbackQuery):
         set_db.set_variable(f'APPLE_{format_type.upper()}_QUALITY', quality)
         setattr(Config, f'APPLE_{format_type.upper()}_QUALITY', quality)
         await apple_quality_cb(c, cb)
+
+
+# Apple Wrapper: Stop with confirmation
+@Client.on_callback_query(filters.regex(pattern=r"^appleStop$"))
+async def apple_wrapper_stop_cb(c: Client, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        # Ask for confirmation
+        buttons = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Confirm Stop", callback_data="appleStopConfirm")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="appleP")]
+        ])
+        await edit_message(cb.message, "Are you sure you want to stop the Wrapper?", buttons)
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^appleStopConfirm$"))
+async def apple_wrapper_stop_confirm_cb(c: Client, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from config import Config as Cfg
+        import asyncio
+        await c.answer_callback_query(cb.id, "Stopping wrapper...", show_alert=False)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "/bin/bash", Cfg.APPLE_WRAPPER_STOP_PATH,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            out = stdout.decode(errors='ignore')
+            err = stderr.decode(errors='ignore')
+            text = "⏹️ Wrapper stop result:\n\n" + (out.strip() or err.strip() or "Done.")
+        except Exception as e:
+            text = f"❌ Failed to stop wrapper: {e}"
+        await edit_message(cb.message, text, InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="appleP")]]))
+
+
+# Apple Wrapper: Setup flow entry (asks for username then password)
+@Client.on_callback_query(filters.regex(pattern=r"^appleSetup$"))
+async def apple_wrapper_setup_cb(c: Client, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        # Explain flow
+        await edit_message(cb.message, "We'll set up the Wrapper. Please send your Apple ID username.\n\nYou can cancel anytime by sending /cancel.", InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="appleP")]]))
+        # Mark state for this user
+        from ..helpers.state import conversation_state
+        await conversation_state.start(cb.from_user.id, "apple_setup_username", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
 
 
 #----------------

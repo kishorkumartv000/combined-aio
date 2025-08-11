@@ -94,3 +94,7 @@ class Config:
     PLAYLIST_ZIP          = getenv("PLAYLIST_ZIP", "False")               # True or False
     ARTIST_ZIP            = getenv("ARTIST_ZIP", "False")                 # True or False
     RCLONE_LINK_OPTIONS   = getenv("RCLONE_LINK_OPTIONS", "Index")        # False, Index, RCLONE, or Both
+
+    # Apple Wrapper Scripts
+    APPLE_WRAPPER_SETUP_PATH = getenv("APPLE_WRAPPER_SETUP_PATH", "/usr/src/app/downloader/setup_wrapper.sh")
+    APPLE_WRAPPER_STOP_PATH  = getenv("APPLE_WRAPPER_STOP_PATH", "/usr/src/app/downloader/stop_wrapper.sh")

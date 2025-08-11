@@ -166,6 +166,11 @@ def apple_button(formats):
     for fmt, label in formats.items():
         buttons.append([InlineKeyboardButton(label, callback_data=f"appleF_{fmt}")])
     buttons.append([InlineKeyboardButton("Quality Settings", callback_data="appleQ")])
+    # Wrapper controls
+    buttons.append([
+        InlineKeyboardButton("🧩 Setup Wrapper", callback_data="appleSetup"),
+        InlineKeyboardButton("⏹️ Stop Wrapper", callback_data="appleStop")
+    ])
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data="providerPanel")])
     return InlineKeyboardMarkup(buttons)
 
