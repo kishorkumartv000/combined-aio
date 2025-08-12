@@ -100,6 +100,19 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
                     pass
         return _cb
 
+    # Pre-stage update so users see "Uploading" immediately, and initialize totals
+    if progress_reporter and itype in ('doc', 'audio', 'video'):
+        try:
+            await progress_reporter.set_stage(progress_label or 'Uploading')
+            if isinstance(item, str) and os.path.exists(item):
+                try:
+                    total_bytes = os.path.getsize(item)
+                    await progress_reporter.update_upload(0, total_bytes, file_index=file_index, file_total=total_files, label=progress_label or 'Uploading')
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     try:
         if itype == 'text':
             msg = await aio.send_message(
@@ -163,7 +176,7 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
             )
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        return await send_message(user, item, itype, caption, markup, chat_id, meta, progress_reporter, progress_label, file_index, total_files)
+        return await send_message(user, item, itype, caption, markup, chat_id, meta, progress_reporter, progress_label, file_index, total_files, cancel_event)
     except Exception as e:
         LOGGER.error(f"Error sending message: {str(e)}")
     
