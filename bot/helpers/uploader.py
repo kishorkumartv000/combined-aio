@@ -3,7 +3,7 @@ import shutil
 import zipfile
 import asyncio
 from config import Config
-from bot.helpers.utils import create_apple_zip, format_string, send_message, edit_message
+from bot.helpers.utils import create_apple_zip, format_string, send_message, edit_message, zip_handler, MAX_SIZE
 from bot.logger import LOGGER
 from mutagen import File
 from mutagen.mp4 import MP4
@@ -91,11 +91,12 @@ async def music_video_upload(metadata, user):
         reporter = user.get('progress')
         if reporter:
             await reporter.set_stage("Uploading")
-        # FIX: Pass the entire metadata object as meta parameter
+        # Decide media type based on setting
+        send_type = 'doc' if getattr(bot_set, 'video_as_document', False) else 'video'
         await send_message(
             user,
             metadata['filepath'],
-            'video',
+            send_type,
             caption=await format_string(
                 "🎬 **{title}**\n👤 {artist}\n🎧 {provider} Music Video",
                 {
@@ -131,6 +132,17 @@ async def music_video_upload(metadata, user):
     if metadata.get('thumbnail'):
         os.remove(metadata['thumbnail'])
 
+def _get_folder_size(folder_path: str) -> int:
+    total_size = 0
+    for root, _, files in os.walk(folder_path):
+        for f in files:
+            try:
+                total_size += os.path.getsize(os.path.join(root, f))
+            except Exception:
+                continue
+    return total_size
+
+
 async def album_upload(metadata, user):
     """
     Upload an album
@@ -147,13 +159,23 @@ async def album_upload(metadata, user):
     if Config.UPLOAD_MODE == 'Telegram':
         reporter = user.get('progress')
         if Config.ALBUM_ZIP:
-            # Create descriptive zip file
-            zip_path = await create_apple_zip(
-                metadata['folderpath'], 
-                user['user_id'],
-                metadata,
-                progress=reporter
-            )
+            # Decide zipping strategy based on folder size and Telegram limits
+            total_size = _get_folder_size(metadata['folderpath'])
+            zip_paths = []
+            if total_size > MAX_SIZE:
+                # Split into multiple zips for Telegram
+                z = await zip_handler(metadata['folderpath'])
+                zip_paths = z if isinstance(z, list) else [z]
+            else:
+                # Single descriptive zip with progress
+                zip_path = await create_apple_zip(
+                    metadata['folderpath'], 
+                    user['user_id'],
+                    metadata,
+                    progress=reporter,
+                    cancel_event=user.get('cancel_event')
+                )
+                zip_paths = [zip_path]
             
             # Create caption with provider info
             caption = await format_string(
@@ -165,19 +187,23 @@ async def album_upload(metadata, user):
                 }
             )
             
-            await send_message(
-                user,
-                zip_path,
-                'doc',
-                caption=caption,
-                progress_reporter=reporter,
-                progress_label="Uploading",
-                file_index=1,
-                total_files=1
-            )
-            
-            # Clean up zip file after upload
-            os.remove(zip_path)
+            total_parts = len(zip_paths)
+            for idx, zp in enumerate(zip_paths, start=1):
+                await send_message(
+                    user,
+                    zp,
+                    'doc',
+                    caption=caption,
+                    progress_reporter=reporter,
+                    progress_label="Uploading",
+                    file_index=idx,
+                    total_files=total_parts
+                )
+                # Clean up zip file after upload
+                try:
+                    os.remove(zp)
+                except Exception:
+                    pass
         else:
             # Upload tracks individually
             tracks = metadata.get('tracks', [])
@@ -222,13 +248,21 @@ async def artist_upload(metadata, user):
     if Config.UPLOAD_MODE == 'Telegram':
         reporter = user.get('progress')
         if Config.ARTIST_ZIP:
-            # Create descriptive zip file
-            zip_path = await create_apple_zip(
-                metadata['folderpath'], 
-                user['user_id'],
-                metadata,
-                progress=reporter
-            )
+            # Decide zipping strategy based on size
+            total_size = _get_folder_size(metadata['folderpath'])
+            zip_paths = []
+            if total_size > MAX_SIZE:
+                z = await zip_handler(metadata['folderpath'])
+                zip_paths = z if isinstance(z, list) else [z]
+            else:
+                zip_path = await create_apple_zip(
+                    metadata['folderpath'], 
+                    user['user_id'],
+                    metadata,
+                    progress=reporter,
+                    cancel_event=user.get('cancel_event')
+                )
+                zip_paths = [zip_path]
             
             # Create caption with provider info
             caption = await format_string(
@@ -239,19 +273,22 @@ async def artist_upload(metadata, user):
                 }
             )
             
-            await send_message(
-                user,
-                zip_path,
-                'doc',
-                caption=caption,
-                progress_reporter=reporter,
-                progress_label="Uploading",
-                file_index=1,
-                total_files=1
-            )
-            
-            # Clean up zip file after upload
-            os.remove(zip_path)
+            total_parts = len(zip_paths)
+            for idx, zp in enumerate(zip_paths, start=1):
+                await send_message(
+                    user,
+                    zp,
+                    'doc',
+                    caption=caption,
+                    progress_reporter=reporter,
+                    progress_label="Uploading",
+                    file_index=idx,
+                    total_files=total_parts
+                )
+                try:
+                    os.remove(zp)
+                except Exception:
+                    pass
         else:
             # Upload albums individually
             for album in metadata['albums']:
@@ -289,13 +326,22 @@ async def playlist_upload(metadata, user):
     if Config.UPLOAD_MODE == 'Telegram':
         reporter = user.get('progress')
         if Config.PLAYLIST_ZIP:
-            # Create descriptive zip file
-            zip_path = await create_apple_zip(
-                metadata['folderpath'], 
-                user['user_id'],
-                metadata,
-                progress=reporter
-            )
+            # Decide zipping strategy based on size
+            total_size = _get_folder_size(metadata['folderpath'])
+            zip_paths = []
+            if total_size > MAX_SIZE:
+                z = await zip_handler(metadata['folderpath'])
+                zip_paths = z if isinstance(z, list) else [z]
+            else:
+                # Create descriptive zip file
+                zip_path = await create_apple_zip(
+                    metadata['folderpath'], 
+                    user['user_id'],
+                    metadata,
+                    progress=reporter,
+                    cancel_event=user.get('cancel_event')
+                )
+                zip_paths = [zip_path]
             
             # Create caption with provider info
             caption = await format_string(
@@ -307,19 +353,22 @@ async def playlist_upload(metadata, user):
                 }
             )
             
-            await send_message(
-                user,
-                zip_path,
-                'doc',
-                caption=caption,
-                progress_reporter=reporter,
-                progress_label="Uploading",
-                file_index=1,
-                total_files=1
-            )
-            
-            # Clean up zip file after upload
-            os.remove(zip_path)
+            total_parts = len(zip_paths)
+            for idx, zp in enumerate(zip_paths, start=1):
+                await send_message(
+                    user,
+                    zp,
+                    'doc',
+                    caption=caption,
+                    progress_reporter=reporter,
+                    progress_label="Uploading",
+                    file_index=idx,
+                    total_files=total_parts
+                )
+                try:
+                    os.remove(zp)
+                except Exception:
+                    pass
         else:
             # Upload tracks individually
             tracks = metadata.get('tracks', [])

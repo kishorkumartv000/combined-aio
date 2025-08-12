@@ -48,6 +48,21 @@ async def upload_mode_cb(client, cb:CallbackQuery):
             pass
 
 
+@Client.on_callback_query(filters.regex(pattern=r"^vidUploadType"))
+async def video_upload_type_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        try:
+            # toggle
+            bot_set.video_as_document = not bool(getattr(bot_set, 'video_as_document', False))
+            set_db.set_variable('VIDEO_AS_DOCUMENT', bot_set.video_as_document)
+        except Exception:
+            pass
+        try:
+            await core_cb(client, cb)
+        except:
+            pass
+
+
 @Client.on_callback_query(filters.regex(pattern=r"^linkOption"))
 async def link_option_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):

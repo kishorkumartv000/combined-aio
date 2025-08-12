@@ -67,6 +67,10 @@ class BotSettings:
         self.playlist_zip = __getvalue__('PLAYLIST_ZIP')
         self.artist_zip = __getvalue__('ARTIST_ZIP')
 
+        # New: telegram video upload type
+        video_doc, _ = set_db.get_variable('VIDEO_AS_DOCUMENT')
+        self.video_as_document = bool(video_doc) if isinstance(video_doc, bool) else (str(video_doc).lower() == 'true')
+
         self.clients = []
         self.download_history = download_history
 

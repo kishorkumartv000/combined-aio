@@ -127,6 +127,12 @@ def core_buttons():
                 text=lang.s.POST_ART_BUT.format(bot_set.art_poster),
                 callback_data='albArt'
             )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"Video Upload: {'Document' if bot_set.video_as_document else 'Media'}",
+                callback_data='vidUploadType'
+            )
         ]
     ]
     inline_keyboard += main_button + close_button
