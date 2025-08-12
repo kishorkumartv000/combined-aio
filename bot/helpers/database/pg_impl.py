@@ -121,18 +121,43 @@ class DownloadHistory(DataBaseHandle):
         (user_id, provider, content_type, content_id, title, artist, quality) 
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
-        cur = self.scur()
-        cur.execute(sql, (user_id, provider, content_type, content_id, title, artist, quality))
-        self._conn.commit()
-        self.ccur(cur)
+        attempts = 0
+        while attempts < 2:
+            cur = self.scur()
+            try:
+                cur.execute(sql, (user_id, provider, content_type, content_id, title, artist, quality))
+                self._conn.commit()
+                self.ccur(cur)
+                return
+            except psycopg2.Error as e:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+                self.re_establish()
+                attempts += 1
+                if attempts >= 2:
+                    raise e
     
     def get_user_history(self, user_id, limit=10):
         sql = "SELECT * FROM download_history WHERE user_id = %s ORDER BY download_time DESC LIMIT %s"
-        cur = self.scur(dictcur=True)
-        cur.execute(sql, (user_id, limit))
-        results = cur.fetchall()
-        self.ccur(cur)
-        return results
+        attempts = 0
+        while attempts < 2:
+            cur = self.scur(dictcur=True)
+            try:
+                cur.execute(sql, (user_id, limit))
+                results = cur.fetchall()
+                self.ccur(cur)
+                return results
+            except psycopg2.Error as e:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+                self.re_establish()
+                attempts += 1
+                if attempts >= 2:
+                    raise e
 
 # Initialize database handlers
 set_db = BotSettings()
