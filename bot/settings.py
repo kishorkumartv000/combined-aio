@@ -19,6 +19,13 @@ def __getvalue__(var):
     value, _ = set_db.get_variable(var)
     return value if value else False
 
+def _to_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() == 'true'
+
 def __encrypt_string__(string):
     s = bytes(string, 'utf-8')
     s = base64.b64encode(s)
@@ -53,19 +60,19 @@ class BotSettings:
         spam, _ = set_db.get_variable('ANTI_SPAM')
         self.anti_spam = spam if spam else 'OFF'
 
-        self.bot_public = __getvalue__('BOT_PUBLIC')
-        self.art_poster = __getvalue__('ART_POSTER')
-        self.playlist_sort = __getvalue__('PLAYLIST_SORT')
-        self.disable_sort_link = __getvalue__('PLAYLIST_LINK_DISABLE')
-        self.artist_batch = __getvalue__('ARTIST_BATCH_UPLOAD')
-        self.playlist_conc = __getvalue__('PLAYLIST_CONCURRENT')
+        self.bot_public = _to_bool(__getvalue__('BOT_PUBLIC'))
+        self.art_poster = _to_bool(__getvalue__('ART_POSTER'))
+        self.playlist_sort = _to_bool(__getvalue__('PLAYLIST_SORT'))
+        self.disable_sort_link = _to_bool(__getvalue__('PLAYLIST_LINK_DISABLE'))
+        self.artist_batch = _to_bool(__getvalue__('ARTIST_BATCH_UPLOAD'))
+        self.playlist_conc = _to_bool(__getvalue__('PLAYLIST_CONCURRENT'))
         
         link_option, _ = set_db.get_variable('RCLONE_LINK_OPTIONS')
         self.link_options = link_option if self.rclone and link_option else 'False'
 
-        self.album_zip = __getvalue__('ALBUM_ZIP')
-        self.playlist_zip = __getvalue__('PLAYLIST_ZIP')
-        self.artist_zip = __getvalue__('ARTIST_ZIP')
+        self.album_zip = _to_bool(__getvalue__('ALBUM_ZIP'))
+        self.playlist_zip = _to_bool(__getvalue__('PLAYLIST_ZIP'))
+        self.artist_zip = _to_bool(__getvalue__('ARTIST_ZIP'))
 
         # New: telegram video upload type
         video_doc, _ = set_db.get_variable('VIDEO_AS_DOCUMENT')
@@ -119,7 +126,7 @@ class BotSettings:
                 subprocess.run([Config.INSTALLER_PATH], check=True)
                 LOGGER.info("Apple Music downloader installed successfully")
             except Exception as e:
-                LOGGER.error(f"Apple Music installer failed: {str(e)}")
+                LOGGER.error(f"Apple Music downloader installation failed: {str(e)}")
 
     def set_language(self):
         """Set bot language"""

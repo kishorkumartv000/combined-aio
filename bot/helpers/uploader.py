@@ -158,7 +158,7 @@ async def album_upload(metadata, user):
     
     if Config.UPLOAD_MODE == 'Telegram':
         reporter = user.get('progress')
-        if Config.ALBUM_ZIP:
+        if bot_set.album_zip:
             # Decide zipping strategy based on folder size and Telegram limits
             total_size = _get_folder_size(metadata['folderpath'])
             zip_paths = []
@@ -247,7 +247,7 @@ async def artist_upload(metadata, user):
     
     if Config.UPLOAD_MODE == 'Telegram':
         reporter = user.get('progress')
-        if Config.ARTIST_ZIP:
+        if bot_set.artist_zip:
             # Decide zipping strategy based on size
             total_size = _get_folder_size(metadata['folderpath'])
             zip_paths = []
@@ -325,7 +325,7 @@ async def playlist_upload(metadata, user):
     
     if Config.UPLOAD_MODE == 'Telegram':
         reporter = user.get('progress')
-        if Config.PLAYLIST_ZIP:
+        if bot_set.playlist_zip:
             # Decide zipping strategy based on size
             total_size = _get_folder_size(metadata['folderpath'])
             zip_paths = []
