@@ -29,7 +29,15 @@ class DataBaseHandle:
             self._connection_users.append(1)
         else:
             LOGGER.info("DATABASE : Established Connection")
-            self._conn = psycopg2.connect(self._dburl)
+            self._conn = psycopg2.connect(
+                self._dburl,
+                connect_timeout=10,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
+                application_name="apple-bot",
+            )
             self._connection_users.append(1)
             self._active_connections.append(self._conn)
 
@@ -47,13 +55,29 @@ class DataBaseHandle:
             try:
                 if dictcur:
                     cur = self._conn.cursor(
-                        cursor_factory=psycopg2.extras.DictCursor)
+                        cursor_factory=psycopg2.extras.DictCursor
+                    )
                 else:
                     cur = self._conn.cursor()
+                # Lightweight health check to proactively detect dropped connections
+                try:
+                    cur.execute("SELECT 1")
+                except psycopg2.Error as ping_err:
+                    LOGGER.debug(
+                        f"Cursor health check failed (attempt {i+1}), reconnecting. {ping_err}"
+                    )
+                    try:
+                        cur.close()
+                    except Exception:
+                        pass
+                    self.re_establish()
+                    continue
                 break
 
-            except psycopg2.InterfaceError as e:
-                LOGGER.debug(f"Attempting to Re-establish the connection to server {i} times. {e}")
+            except psycopg2.Error as e:
+                LOGGER.debug(
+                    f"Attempting to Re-establish the connection to server {i} times. {e}"
+                )
                 self.re_establish()
 
         return cur
@@ -63,14 +87,23 @@ class DataBaseHandle:
         """
 
         try:
-            if self._active_connections[0].closed != 0:
-                LOGGER.debug("Re-establish Success.")
-                self._conn = psycopg2.connect(self._dburl)
-                self._active_connections[0] = self._conn
+            LOGGER.debug("Re-establishing database connection...")
+            new_conn = psycopg2.connect(
+                self._dburl,
+                connect_timeout=10,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
+                application_name="apple-bot",
+            )
+            self._conn = new_conn
+            if self._active_connections:
+                self._active_connections[0] = new_conn
             else:
-                LOGGER.debug("Re-establish Success Cache.")
-                self._conn = self._active_connections[0]
-        except:
+                self._active_connections.append(new_conn)
+            LOGGER.debug("Re-establish Success.")
+        except Exception:
             time.sleep(1)  # Blocking call ... this stage is panic.
 
     def ccur(self, cursor: psycopg2.extensions.cursor) -> None:
