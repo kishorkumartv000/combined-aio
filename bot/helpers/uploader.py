@@ -26,7 +26,7 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
     else:
         base_path = Config.LOCAL_STORAGE
     
-    if Config.UPLOAD_MODE == 'Telegram':
+    if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
         if reporter:
             await reporter.set_stage("Uploading")
@@ -54,7 +54,7 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
             total_files=total,
             cancel_event=user.get('cancel_event')
         )
-    elif Config.UPLOAD_MODE == 'Rclone':
+    elif bot_set.upload_mode == 'RCLONE':
         rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
         text = await format_string(
             "🎵 **{title}**\n👤 {artist}\n🎧 {provider}\n🔗 [Direct Link]({r_link})",
@@ -87,7 +87,7 @@ async def music_video_upload(metadata, user):
     else:
         base_path = Config.LOCAL_STORAGE
     
-    if Config.UPLOAD_MODE == 'Telegram':
+    if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
         if reporter:
             await reporter.set_stage("Uploading")
@@ -112,7 +112,7 @@ async def music_video_upload(metadata, user):
             total_files=1,
             cancel_event=user.get('cancel_event')
         )
-    elif Config.UPLOAD_MODE == 'Rclone':
+    elif bot_set.upload_mode == 'RCLONE':
         rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
         text = await format_string(
             "🎬 **{title}**\n👤 {artist}\n🎧 {provider} Music Video\n🔗 [Direct Link]({r_link})",
@@ -156,7 +156,7 @@ async def album_upload(metadata, user):
     else:
         base_path = Config.LOCAL_STORAGE
     
-    if Config.UPLOAD_MODE == 'Telegram':
+    if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
         if bot_set.album_zip:
             # Decide zipping strategy based on folder size and Telegram limits
@@ -206,11 +206,11 @@ async def album_upload(metadata, user):
                     pass
         else:
             # Upload tracks individually
-            tracks = metadata.get('tracks', [])
+            tracks = metadata.get('tracks') or metadata.get('items', [])
             total_tracks = len(tracks)
             for idx, track in enumerate(tracks, start=1):
                 await track_upload(track, user, index=idx, total=total_tracks)
-    elif Config.UPLOAD_MODE == 'Rclone':
+    elif bot_set.upload_mode == 'RCLONE':
         rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
         text = await format_string(
             "💿 **{album}**\n👤 {artist}\n🎧 {provider}\n🔗 [Direct Link]({r_link})",
@@ -245,7 +245,7 @@ async def artist_upload(metadata, user):
     else:
         base_path = Config.LOCAL_STORAGE
     
-    if Config.UPLOAD_MODE == 'Telegram':
+    if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
         if bot_set.artist_zip:
             # Decide zipping strategy based on size
@@ -290,10 +290,16 @@ async def artist_upload(metadata, user):
                 except Exception:
                     pass
         else:
-            # Upload albums individually
-            for album in metadata['albums']:
-                await album_upload(album, user)
-    elif Config.UPLOAD_MODE == 'Rclone':
+            # Upload albums or tracks individually
+            if 'albums' in metadata:
+                for album in metadata['albums']:
+                    await album_upload(album, user)
+            else:
+                tracks = metadata.get('tracks') or metadata.get('items', [])
+                total_tracks = len(tracks)
+                for idx, track in enumerate(tracks, start=1):
+                    await track_upload(track, user, index=idx, total=total_tracks)
+    elif bot_set.upload_mode == 'RCLONE':
         rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
         text = await format_string(
             "🎤 **{artist}**\n🎧 {provider} Discography\n🔗 [Direct Link]({r_link})",
@@ -323,7 +329,7 @@ async def playlist_upload(metadata, user):
     else:
         base_path = Config.LOCAL_STORAGE
     
-    if Config.UPLOAD_MODE == 'Telegram':
+    if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
         if bot_set.playlist_zip:
             # Decide zipping strategy based on size
@@ -371,11 +377,11 @@ async def playlist_upload(metadata, user):
                     pass
         else:
             # Upload tracks individually
-            tracks = metadata.get('tracks', [])
+            tracks = metadata.get('tracks') or metadata.get('items', [])
             total_tracks = len(tracks)
             for idx, track in enumerate(tracks, start=1):
                 await track_upload(track, user, index=idx, total=total_tracks)
-    elif Config.UPLOAD_MODE == 'Rclone':
+    elif bot_set.upload_mode == 'RCLONE':
         rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
         text = await format_string(
             "🎵 **{title}**\n👤 Curated by {artist}\n🎧 {provider} Playlist\n🔗 [Direct Link]({r_link})",
@@ -398,10 +404,8 @@ async def rclone_upload(user, path, base_path):
     Upload files via Rclone
     Args:
         user: User details
-        path: Path to file/folder
-        base_path: Base directory path
-    Returns:
-        rclone_link, index_link
+        path: File or folder path
+        base_path: Base path for rclone config
     """
     # Skip if not configured
     if not Config.RCLONE_DEST:
