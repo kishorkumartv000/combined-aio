@@ -193,3 +193,82 @@ This build is Apple Music–only. Qobuz, Tidal, and Deezer integrations have bee
 
 ### Realtime system usage in progress
 - Progress messages now include CPU, RAM, and Disk usage to help monitor server load while tasks run.
+
+## Apple Music Config (config.yaml) via Telegram
+
+Admins can view and edit `/root/amalac/config.yaml` in real time. Changes are written safely with a backup created each time.
+
+Path override: set env `APPLE_CONFIG_YAML_PATH` to a different file if needed.
+
+### Commands
+
+- /config or /cfg: Show quick help and path
+- /config_show [keys...]: Show current values for a curated list or specific keys
+- /config_get <key>: Show current value of a key (sensitive values are masked)
+- /config_set <key> <value>: Set key to value (with validation where applicable)
+- /config_toggle <bool-key>: Toggle a boolean key between true/false
+
+### Supported Keys and Validation
+
+- Choice keys:
+  - lrc-type: lyrics | syllable-lyrics
+  - lrc-format: lrc | ttml
+  - cover-format: jpg | png | original
+  - mv-audio-type: atmos | ac3 | aac
+- Boolean keys:
+  - embed-lrc
+  - save-lrc-file
+  - save-artist-cover
+  - save-animated-artwork
+  - emby-animated-artwork
+  - embed-cover
+  - dl-albumcover-for-playlist
+- Integer keys:
+  - mv-max (e.g., 2160)
+- Sensitive keys (masked in outputs; will be auto-quoted on set):
+  - media-user-token
+  - authorization-token
+
+Other common keys you can set directly with /config_set:
+- cover-size (e.g., `5000x5000`)
+- alac-save-folder, atmos-save-folder, aac-save-folder (folders are auto-created if missing)
+- alac-max, atmos-max, aac-type, storefront, language
+
+### Examples
+
+```text
+/config_show
+/config_get storefront
+/config_set storefront in
+/config_set lrc-type lyrics
+/config_set lrc-format lrc
+/config_toggle embed-lrc
+/config_toggle save-artist-cover
+/config_set cover-format png
+/config_set cover-size 5000x5000
+/config_set mv-audio-type atmos
+/config_set mv-max 2160
+/config_set media-user-token "<your_token_here>"
+/config_set alac-save-folder "/usr/src/app/bot/DOWNLOADS/5329535193/Apple Music/alac"
+```
+
+Note: If the Apple downloader runs persistently, restart it after updating critical values (tokens, formats) so it reloads the file.
+
+## BotFather command list (copy-paste)
+
+```text
+start - Start the bot
+help - Show help
+settings - Open settings panel
+download - Start a download
+cancel - Cancel a running task by ID
+cancel_all - Cancel all your running tasks
+config - Config help for Apple Music YAML
+config_show - Show config values (or specific keys)
+config_get - Get a single config value
+config_set - Set a config value
+config_toggle - Toggle a boolean config value
+log - Get the bot log
+auth - Authorize a user or chat
+ban - Ban a user or chat
+```
