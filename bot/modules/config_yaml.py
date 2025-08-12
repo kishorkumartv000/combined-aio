@@ -14,6 +14,24 @@ from ..helpers.message import send_message, check_user
 YAML_PATH = Config.APPLE_CONFIG_YAML_PATH
 
 SENSITIVE_KEYS = {"media-user-token", "authorization-token"}
+BOOLEAN_KEYS = {
+    "embed-lrc",
+    "save-lrc-file",
+    "save-artist-cover",
+    "save-animated-artwork",
+    "emby-animated-artwork",
+    "embed-cover",
+    "dl-albumcover-for-playlist",
+}
+
+CHOICE_KEYS: dict[str, list[str]] = {
+    "lrc-type": ["lyrics", "syllable-lyrics"],
+    "lrc-format": ["lrc", "ttml"],
+    "cover-format": ["jpg", "png", "original"],
+    "mv-audio-type": ["atmos", "ac3", "aac"],
+}
+
+INTEGER_KEYS = {"mv-max"}
 
 
 def _read_yaml_lines(path: str) -> list[str]:
@@ -109,8 +127,16 @@ async def config_help(c: Client, msg: Message):
         "Usage:\n"
         "- /config_get <key>\n"
         "- /config_set <key> <value>\n"
+        "- /config_toggle <bool-key> (toggles true/false)\n"
         "- /config_show [keys...] (space-separated)\n"
-        f"Path: {YAML_PATH}"
+        f"Path: {YAML_PATH}\n\n"
+        "Choices:\n"
+        "- lrc-type: lyrics | syllable-lyrics\n"
+        "- lrc-format: lrc | ttml\n"
+        "- cover-format: jpg | png | original\n"
+        "- mv-audio-type: atmos | ac3 | aac\n"
+        "Integers:\n"
+        "- mv-max (e.g., 2160)\n"
     )
     await send_message(msg, text)
 
@@ -144,6 +170,30 @@ async def config_set(c: Client, msg: Message):
     key = parts[1].strip()
     value = parts[2].strip()
 
+    # Normalize and validate
+    key_l = key.lower()
+    if key_l in BOOLEAN_KEYS:
+        lv = value.lower()
+        if lv in {"true", "1", "yes", "on"}:
+            value = "true"
+        elif lv in {"false", "0", "no", "off"}:
+            value = "false"
+        else:
+            await send_message(msg, f"Invalid boolean for {key}. Use true/false.")
+            return
+    elif key_l in CHOICE_KEYS:
+        choices = CHOICE_KEYS[key_l]
+        if value.lower() not in choices:
+            await send_message(msg, f"Invalid value for {key}. Allowed: {', '.join(choices)}")
+            return
+        value = value.lower()
+    elif key_l in INTEGER_KEYS:
+        if not value.isdigit():
+            await send_message(msg, f"{key} must be an integer.")
+            return
+        # keep as plain number without quotes
+        value = value
+
     if key in SENSITIVE_KEYS and not (value.startswith('"') or value.startswith("'")):
         # wrap sensitive values in quotes to avoid YAML parsing issues
         value = f'"{value}"'
@@ -168,6 +218,33 @@ async def config_set(c: Client, msg: Message):
             pass
 
     await send_message(msg, f"Updated {key}.")
+
+
+@Client.on_message(filters.command(["config_toggle"]))
+async def config_toggle(c: Client, msg: Message):
+    if not await check_user(msg.from_user.id, restricted=True):
+        return
+    parts = msg.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await send_message(msg, "Usage: /config_toggle <bool-key>")
+        return
+    key = parts[1].strip()
+    key_l = key.lower()
+    if key_l not in BOOLEAN_KEYS:
+        await send_message(msg, f"{key} is not a known boolean key.")
+        return
+    lines = _read_yaml_lines(YAML_PATH)
+    current = _get_key(lines, key)
+    cur = (current or "").split("#", 1)[0].strip().lower()
+    new_val = "false" if cur == "true" else "true"
+    _backup(YAML_PATH)
+    new_lines = _set_key(lines, key, new_val)
+    try:
+        _write_yaml_lines(YAML_PATH, new_lines)
+    except Exception as e:
+        await send_message(msg, f"Failed to write config: {e}")
+        return
+    await send_message(msg, f"Toggled {key} -> {new_val}.")
 
 
 @Client.on_message(filters.command(["config_show"]))
@@ -201,6 +278,9 @@ async def config_show(c: Client, msg: Message):
             "alac-save-folder",
             "atmos-save-folder",
             "aac-save-folder",
+            "dl-albumcover-for-playlist",
+            "mv-audio-type",
+            "mv-max",
             "alac-max",
             "atmos-max",
             "aac-type",
