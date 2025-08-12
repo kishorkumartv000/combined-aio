@@ -75,10 +75,9 @@ class BotSettings(DataBaseHandle):
             elif vtype == "str":
                 val = str(row[2])
             elif vtype == "bool":
-                if row[2] == "true":
-                    val = True
-                else:
-                    val = False
+                # Accept different representations (True/true/1/yes/on)
+                sval = str(row[2]).strip().lower()
+                val = sval in ("true", "1", "yes", "on")
 
             return val, row[4]
         else:

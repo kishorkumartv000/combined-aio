@@ -51,6 +51,15 @@ class AppleMusicProvider:
         label = f"Apple Music • ID: {user.get('task_id','?')}"
         reporter = ProgressReporter(user['bot_msg'], label=label)
         user['progress'] = reporter
+        # Attach to task manager for /status snapshots
+        try:
+            from bot.helpers.tasks import task_manager
+            if user.get('task_id'):
+                import asyncio as _asyncio
+                # Fire and forget; no need to await strictly here
+                _asyncio.create_task(task_manager.attach_progress(user['task_id'], reporter))
+        except Exception:
+            pass
         await reporter.set_stage("Preparing")
         
         # Download content
@@ -198,6 +207,12 @@ async def start_apple(link: str, user: dict, options: dict = None):
         if result['type'] == 'track':
             await track_upload(result['items'][0], user)
         elif result['type'] == 'video':
+            # Update label to show video emoji
+            try:
+                if user.get('progress'):
+                    user['progress'].label = f"🎬 Apple Music • ID: {user.get('task_id','?')}"
+            except Exception:
+                pass
             await music_video_upload(result['items'][0], user)
         elif result['type'] == 'album':
             await album_upload(result, user)

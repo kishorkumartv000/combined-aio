@@ -14,6 +14,8 @@ class TaskState:
         self.cancel_event = asyncio.Event()
         self.subprocess: Optional[asyncio.subprocess.Process] = None
         self.status: str = "running"
+        # Optional progress reporter instance
+        self.progress = None
 
 
 class TaskManager:
@@ -41,6 +43,13 @@ class TaskManager:
             state = self._tasks.get(task_id)
             if state:
                 state.subprocess = None
+
+    async def attach_progress(self, task_id: str, reporter):
+        """Attach a progress reporter instance to a task"""
+        async with self._lock:
+            state = self._tasks.get(task_id)
+            if state:
+                state.progress = reporter
 
     async def cancel(self, task_id: str) -> bool:
         async with self._lock:
@@ -88,6 +97,12 @@ class TaskManager:
     async def get(self, task_id: str) -> Optional[TaskState]:
         # Read-only; acceptable without lock
         return self._tasks.get(task_id)
+
+    async def list(self, user_id: Optional[int] = None) -> Dict[str, TaskState]:
+        """Return current tasks, optionally filtered by user_id"""
+        if user_id is None:
+            return dict(self._tasks)
+        return {tid: st for tid, st in self._tasks.items() if st.user_id == user_id}
 
 
 # Singleton
