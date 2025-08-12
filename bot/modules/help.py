@@ -12,6 +12,7 @@ HELP_TEXT = (
     "  • The bot replies with a Task ID.\n"
     "  • Use /cancel <task_id> to stop that task.\n"
     "  • Use /cancel_all to stop all your running tasks.\n"
+    "- /status: Show status of your ongoing tasks (progress, zipping, uploading, uptime)\n"
     "- /settings: Open settings panel\n"
     "- /help: Show this message\n"
 )
