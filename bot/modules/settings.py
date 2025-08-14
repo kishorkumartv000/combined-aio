@@ -28,6 +28,29 @@ async def core_cb(client, cb:CallbackQuery):
         )
 
 
+# New: Rclone settings panel
+@Client.on_callback_query(filters.regex(pattern=r"^rclonePanel"))
+async def rclone_panel_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        await edit_message(
+            cb.message,
+            "Rclone Settings",
+            rclone_buttons()
+        )
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneScope"))
+async def rclone_scope_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        # Toggle between FILE and FOLDER
+        current = getattr(bot_set, 'rclone_copy_scope', 'FILE').upper()
+        next_value = 'FOLDER' if current == 'FILE' else 'FILE'
+        bot_set.rclone_copy_scope = next_value
+        set_db.set_variable('RCLONE_COPY_SCOPE', next_value)
+        try:
+            await rclone_panel_cb(client, cb)
+        except:
+            pass
+
 
 @Client.on_callback_query(filters.regex(pattern=r"^upload"))
 async def upload_mode_cb(client, cb:CallbackQuery):

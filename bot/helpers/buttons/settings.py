@@ -7,28 +7,36 @@ main_button = [[InlineKeyboardButton(text=lang.s.MAIN_MENU_BUTTON, callback_data
 close_button = [[InlineKeyboardButton(text=lang.s.CLOSE_BUTTON, callback_data="close")]]
 
 def main_menu():
-    inline_keyboard = [
-        [
-            InlineKeyboardButton(
-                text=lang.s.CORE,
-                callback_data='corePanel'
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=lang.s.TELEGRAM,
-                callback_data='tgPanel'
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=lang.s.PROVIDERS,
-                callback_data='providerPanel'
-            )
-        ]
-    ]
-    inline_keyboard += close_button
-    return InlineKeyboardMarkup(inline_keyboard)
+	inline_keyboard = [
+		[
+			InlineKeyboardButton(
+				text=lang.s.CORE,
+				callback_data='corePanel'
+			)
+		],
+		[
+			InlineKeyboardButton(
+				text=lang.s.TELEGRAM,
+				callback_data='tgPanel'
+			)
+		],
+		[
+			InlineKeyboardButton(
+				text=lang.s.PROVIDERS,
+				callback_data='providerPanel'
+			)
+		]
+	]
+	# Show Rclone section if available
+	if bot_set.rclone:
+		inline_keyboard.append([
+			InlineKeyboardButton(
+				text="Rclone",
+				callback_data='rclonePanel'
+			)
+		])
+	inline_keyboard += close_button
+	return InlineKeyboardMarkup(inline_keyboard)
 
 def providers_button():
     inline_keyboard = []
@@ -69,74 +77,88 @@ def tg_button():
     return InlineKeyboardMarkup(inline_keyboard)
 
 def core_buttons():
-    inline_keyboard = []
+	inline_keyboard = []
 
-    if bot_set.rclone:
-        inline_keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text=f"Return Link : {bot_set.link_options}",
-                    callback_data='linkOptions'
-                )
-            ]
-        )
+	if bot_set.rclone:
+		inline_keyboard.append(
+			[
+				InlineKeyboardButton(
+					text=f"Return Link : {bot_set.link_options}",
+					callback_data='linkOptions'
+				)
+			]
+		)
 
-    inline_keyboard += [
-        [
-            InlineKeyboardButton(
-                text=f"Upload : {bot_set.upload_mode}",
-                callback_data='upload'
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=lang.s.SORT_PLAYLIST.format(bot_set.playlist_sort),
-                callback_data='sortPlay'
-            ),
-            InlineKeyboardButton(
-                text=lang.s.DISABLE_SORT_LINK.format(bot_set.disable_sort_link),
-                callback_data='sortLinkPlay'
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=lang.s.PLAYLIST_ZIP.format(bot_set.playlist_zip),
-                callback_data='playZip'
-            ),
-            InlineKeyboardButton(
-                text=lang.s.PLAYLIST_CONC_BUT.format(bot_set.playlist_conc),
-                callback_data='playCONC'
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=lang.s.ARTIST_BATCH_BUT.format(bot_set.artist_batch),
-                callback_data='artBATCH'
-            ),
-            InlineKeyboardButton(
-                text=lang.s.ARTIST_ZIP.format(bot_set.artist_zip),
-                callback_data='artZip'
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=lang.s.ALBUM_ZIP.format(bot_set.album_zip),
-                callback_data='albZip'
-            ),
-            InlineKeyboardButton(
-                text=lang.s.POST_ART_BUT.format(bot_set.art_poster),
-                callback_data='albArt'
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=f"Video Upload: {'Document' if bot_set.video_as_document else 'Media'}",
-                callback_data='vidUploadType'
-            )
-        ]
-    ]
-    inline_keyboard += main_button + close_button
-    return InlineKeyboardMarkup(inline_keyboard)
+	inline_keyboard += [
+		[
+			InlineKeyboardButton(
+				text=f"Upload : {bot_set.upload_mode}",
+				callback_data='upload'
+			)
+		],
+		[
+			InlineKeyboardButton(
+				text=lang.s.SORT_PLAYLIST.format(bot_set.playlist_sort),
+				callback_data='sortPlay'
+			),
+			InlineKeyboardButton(
+				text=lang.s.DISABLE_SORT_LINK.format(bot_set.disable_sort_link),
+				callback_data='sortLinkPlay'
+			)
+		],
+		[
+			InlineKeyboardButton(
+				text=lang.s.PLAYLIST_ZIP.format(bot_set.playlist_zip),
+				callback_data='playZip'
+			),
+			InlineKeyboardButton(
+				text=lang.s.PLAYLIST_CONC_BUT.format(bot_set.playlist_conc),
+				callback_data='playCONC'
+			)
+		],
+		[
+			InlineKeyboardButton(
+				text=lang.s.ARTIST_BATCH_BUT.format(bot_set.artist_batch),
+				callback_data='artBATCH'
+			),
+			InlineKeyboardButton(
+				text=lang.s.ARTIST_ZIP.format(bot_set.artist_zip),
+				callback_data='artZip'
+			)
+		],
+		[
+			InlineKeyboardButton(
+				text=lang.s.ALBUM_ZIP.format(bot_set.album_zip),
+				callback_data='albZip'
+			),
+			InlineKeyboardButton(
+				text=lang.s.POST_ART_BUT.format(bot_set.art_poster),
+				callback_data='albArt'
+			)
+		],
+		[
+			InlineKeyboardButton(
+				text=f"Video Upload: {'Document' if bot_set.video_as_document else 'Media'}",
+				callback_data='vidUploadType'
+			)
+		]
+	]
+	inline_keyboard += main_button + close_button
+	return InlineKeyboardMarkup(inline_keyboard)
+
+# New: Rclone settings buttons
+
+def rclone_buttons():
+	inline_keyboard = [
+		[
+			InlineKeyboardButton(
+				text=f"Copy Scope: {'Folder' if bot_set.rclone_copy_scope == 'FOLDER' else 'File'}",
+				callback_data='rcloneScope'
+			)
+		]
+	]
+	inline_keyboard += main_button + close_button
+	return InlineKeyboardMarkup(inline_keyboard)
 
 def language_buttons(languages, selected):
     inline_keyboard = []
