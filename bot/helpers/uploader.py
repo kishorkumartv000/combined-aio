@@ -405,36 +405,92 @@ async def rclone_upload(user, path, base_path):
     Args:
         user: User details
         path: File or folder path
-        base_path: Base path for rclone config
+        base_path: Base path used to compute relative path for remote
     """
-    # Skip if not configured
+    # Ensure destination is configured
     if not Config.RCLONE_DEST:
         return None, None
-    
-    # Get relative path
-    relative_path = str(path).replace(base_path, "").lstrip('/')
-    
+
+    # Normalize source path
+    abs_path = os.path.abspath(path)
+
+    # Compute relative path under a sensible root so remote path matches layout
+    def _compute_relative(p: str, base: str | None) -> str:
+        try:
+            p_abs = os.path.abspath(p)
+            if base:
+                base_abs = os.path.abspath(base)
+                if p_abs.startswith(base_abs):
+                    return os.path.relpath(p_abs, base_abs)
+        except Exception:
+            pass
+        # Fallback: try to anchor at "Apple Music" if present
+        if "Apple Music" in abs_path:
+            try:
+                parts = p_abs.split(os.sep)
+                if "Apple Music" in parts:
+                    idx = parts.index("Apple Music")
+                    root = os.sep.join(parts[:idx + 1])
+                    return os.path.relpath(p_abs, root)
+            except Exception:
+                pass
+        # Last resort: basename
+        return os.path.basename(p_abs) if os.path.isfile(p_abs) else os.path.basename(os.path.normpath(p_abs))
+
+    relative_path = _compute_relative(abs_path, base_path)
+
+    # Decide destination for copy
+    is_directory = os.path.isdir(abs_path)
+    if is_directory:
+        dest_path = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+    else:
+        parent_dir = os.path.dirname(relative_path)
+        dest_path = f"{Config.RCLONE_DEST}/{parent_dir}".rstrip("/")
+
+    # 1) Copy source to remote destination
+    copy_cmd = f'rclone copy --config ./rclone.conf "{abs_path}" "{dest_path}"'
+    copy_task = await asyncio.create_subprocess_shell(
+        copy_cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    copy_stdout, copy_stderr = await copy_task.communicate()
+    if copy_task.returncode != 0:
+        try:
+            LOGGER.debug(f"Rclone copy failed: {copy_stderr.decode().strip()}")
+        except Exception:
+            pass
+        # Even if copy fails, return None links so caller can handle gracefully
+        return None, None
+
+    # 2) Build links
     rclone_link = None
     index_link = None
 
+    # Rclone share link
     if bot_set.link_options in ['RCLONE', 'Both']:
-        cmd = f'rclone link --config ./rclone.conf "{Config.RCLONE_DEST}/{relative_path}"'
-        task = await asyncio.create_subprocess_shell(
-            cmd,
+        link_target = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+        link_cmd = f'rclone link --config ./rclone.conf "{link_target}"'
+        link_task = await asyncio.create_subprocess_shell(
+            link_cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-
-        stdout, stderr = await task.communicate()
-
-        if task.returncode == 0:
-            rclone_link = stdout.decode().strip()
+        stdout, stderr = await link_task.communicate()
+        if link_task.returncode == 0:
+            try:
+                rclone_link = stdout.decode().strip()
+            except Exception:
+                rclone_link = None
         else:
-            error_message = stderr.decode().strip()
-            LOGGER.debug(f"Failed to get Rclone link: {error_message}")
-    
-    if bot_set.link_options in ['Index', 'Both']:
-        if Config.INDEX_LINK:
-            index_link = f"{Config.INDEX_LINK}/{relative_path}"
-    
+            try:
+                LOGGER.debug(f"Failed to get Rclone link: {stderr.decode().strip()}")
+            except Exception:
+                pass
+
+    # Optional index link
+    if bot_set.link_options in ['Index', 'Both'] and Config.INDEX_LINK:
+        # Do not URL-encode here to keep behavior in line with current uploader; indexers usually handle spaces
+        index_link = f"{Config.INDEX_LINK}/{relative_path}".replace(" ", "%20")
+
     return rclone_link, index_link
