@@ -70,6 +70,10 @@ class BotSettings:
         link_option, _ = set_db.get_variable('RCLONE_LINK_OPTIONS')
         self.link_options = link_option if self.rclone and link_option else 'False'
 
+        # New: Rclone copy scope (FILE or FOLDER)
+        rclone_scope, _ = set_db.get_variable('RCLONE_COPY_SCOPE')
+        self.rclone_copy_scope = (rclone_scope or 'FILE').upper()
+
         self.album_zip = _to_bool(__getvalue__('ALBUM_ZIP'))
         self.playlist_zip = _to_bool(__getvalue__('PLAYLIST_ZIP'))
         self.artist_zip = _to_bool(__getvalue__('ARTIST_ZIP'))

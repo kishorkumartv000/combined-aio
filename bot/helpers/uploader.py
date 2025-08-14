@@ -437,18 +437,35 @@ async def rclone_upload(user, path, base_path):
         # Last resort: basename
         return os.path.basename(p_abs) if os.path.isfile(p_abs) else os.path.basename(os.path.normpath(p_abs))
 
-    relative_path = _compute_relative(abs_path, base_path)
-
-    # Decide destination for copy
+    # Decide scope: FILE (existing) vs FOLDER (full folder tree)
+    scope = getattr(bot_set, 'rclone_copy_scope', 'FILE').upper()
     is_directory = os.path.isdir(abs_path)
-    if is_directory:
-        dest_path = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+
+    if scope == 'FOLDER':
+        # Resolve the root folder we should copy
+        if is_directory:
+            source_for_copy = abs_path
+            relative_path = _compute_relative(abs_path, base_path)
+            dest_path = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+        else:
+            # Copy the parent folder that contains the file
+            parent_dir_abs = os.path.dirname(abs_path)
+            source_for_copy = parent_dir_abs
+            relative_path = _compute_relative(parent_dir_abs, base_path)
+            dest_path = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
     else:
-        parent_dir = os.path.dirname(relative_path)
-        dest_path = f"{Config.RCLONE_DEST}/{parent_dir}".rstrip("/")
+        # FILE scope: keep existing behavior
+        relative_path = _compute_relative(abs_path, base_path)
+        if is_directory:
+            source_for_copy = abs_path
+            dest_path = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+        else:
+            parent_dir = os.path.dirname(relative_path)
+            source_for_copy = abs_path
+            dest_path = f"{Config.RCLONE_DEST}/{parent_dir}".rstrip("/")
 
     # 1) Copy source to remote destination
-    copy_cmd = f'rclone copy --config ./rclone.conf "{abs_path}" "{dest_path}"'
+    copy_cmd = f'rclone copy --config ./rclone.conf "{source_for_copy}" "{dest_path}"'
     copy_task = await asyncio.create_subprocess_shell(
         copy_cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -469,7 +486,11 @@ async def rclone_upload(user, path, base_path):
 
     # Rclone share link
     if bot_set.link_options in ['RCLONE', 'Both']:
-        link_target = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+        # Link target should reflect the relative root of the uploaded entity
+        if scope == 'FOLDER':
+            link_target = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+        else:
+            link_target = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
         link_cmd = f'rclone link --config ./rclone.conf "{link_target}"'
         link_task = await asyncio.create_subprocess_shell(
             link_cmd,
