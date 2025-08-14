@@ -6,7 +6,7 @@ set -e
 export PATH="$PATH:/usr/local/go/bin"
 
 # Load configuration
-CONFIG_FILE="$HOME/amalac/am_downloader.conf"
+CONFIG_FILE="$HOME/amalac/rcloner_downloader.conf"
 [ ! -f "$CONFIG_FILE" ] && { echo "Configuration missing! Run installer first."; exit 1; }
 source "$CONFIG_FILE"
 
