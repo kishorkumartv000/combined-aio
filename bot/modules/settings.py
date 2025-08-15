@@ -192,7 +192,8 @@ async def handle_dest_path_text(client, message: Message):
         user_id = message.from_user.id if message.from_user else None
         if user_id not in _dest_path_waiting:
             return
-        text = (message.text or '').strip()
+        raw = (message.text or '').strip()
+        text = raw.strip('/')
         # Update bot_set and DB
         bot_set.rclone_dest_path = text
         # Build final
@@ -280,6 +281,8 @@ async def _render_browse(client, cb_or_msg, path: str):
     # Up button if not root
     if path:
         rows.append([InlineKeyboardButton("⬆️ Up", callback_data="rcloneDestPathUp")])
+    # Always show root shortcut
+    rows.append([InlineKeyboardButton("🏠 Root", callback_data="rcloneDestPathRoot")])
     rows.append([InlineKeyboardButton("Cancel", callback_data="rclonePanel")])
 
     title = f"Browsing: /{path}" if path else "Browsing: /"
@@ -288,9 +291,8 @@ async def _render_browse(client, cb_or_msg, path: str):
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathBrowseStart$"))
 async def rclone_dest_path_browse_start_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
-        # Initialize browse at current path if set, else root
-        start_path = getattr(bot_set, 'rclone_dest_path', '')
-        await _render_browse(client, cb, start_path)
+        # Initialize browse at root by default
+        await _render_browse(client, cb, '')
 
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathCd\|"))
 async def rclone_dest_path_cd_cb(client, cb:CallbackQuery):
@@ -335,6 +337,11 @@ async def rclone_dest_path_select_here_cb(client, cb:CallbackQuery):
         set_db.set_variable('RCLONE_DEST_PATH', path)
         set_db.set_variable('RCLONE_DEST', final)
         await rclone_panel_cb(client, cb)
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathRoot$"))
+async def rclone_dest_path_root_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        await _render_browse(client, cb, '')
 
 
 @Client.on_callback_query(filters.regex(pattern=r"^upload"))
