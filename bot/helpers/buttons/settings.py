@@ -2,6 +2,7 @@ import bot.helpers.translations as lang
 from bot.settings import bot_set
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from config import Config
+import os
 
 main_button = [[InlineKeyboardButton(text=lang.s.MAIN_MENU_BUTTON, callback_data="main_menu")]]
 close_button = [[InlineKeyboardButton(text=lang.s.CLOSE_BUTTON, callback_data="close")]]
@@ -149,14 +150,37 @@ def core_buttons():
 # New: Rclone settings buttons
 
 def rclone_buttons():
-    inline_keyboard = [
-        [
-            InlineKeyboardButton(
-                text=f"Copy Scope: {'Folder' if bot_set.rclone_copy_scope == 'FOLDER' else 'File'}",
-                callback_data='rcloneScope'
-            )
-        ]
-    ]
+    inline_keyboard = []
+
+    # Status line
+    status_text = "Present" if os.path.exists('rclone.conf') else "Not found"
+    inline_keyboard.append([
+        InlineKeyboardButton(
+            text=f"rclone.conf: {status_text}",
+            callback_data='noop'
+        )
+    ])
+
+    # Copy scope toggle
+    inline_keyboard.append([
+        InlineKeyboardButton(
+            text=f"Copy Scope: {'Folder' if bot_set.rclone_copy_scope == 'FOLDER' else 'File'}",
+            callback_data='rcloneScope'
+        )
+    ])
+
+    # Import / Delete controls
+    inline_keyboard.append([
+        InlineKeyboardButton(
+            text="Import rclone.conf",
+            callback_data='rcloneImport'
+        ),
+        InlineKeyboardButton(
+            text="Delete rclone.conf",
+            callback_data='rcloneDelete'
+        )
+    ])
+
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
 

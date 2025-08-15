@@ -38,6 +38,53 @@ async def rclone_panel_cb(client, cb:CallbackQuery):
             rclone_buttons()
         )
 
+# Simple in-memory flag to accept next document as rclone.conf
+_import_waiting = set()
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneImport"))
+async def rclone_import_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        _import_waiting.add(cb.from_user.id)
+        await edit_message(cb.message, "Please send your rclone.conf as a document now.")
+
+@Client.on_message(filters.document)
+async def handle_rclone_conf_upload(client, message: Message):
+    try:
+        user_id = message.from_user.id if message.from_user else None
+        if user_id not in _import_waiting:
+            return
+        if not message.document:
+            return
+        # Only accept a file named rclone.conf or any .conf
+        filename = (message.document.file_name or '').lower()
+        if 'rclone' not in filename and not filename.endswith('.conf'):
+            return
+        # Download to a temp path and move to ./rclone.conf
+        temp_path = await client.download_media(message, file_name='rclone.conf.tmp')
+        import os
+        if os.path.exists('rclone.conf'):
+            os.remove('rclone.conf')
+        os.replace(temp_path, 'rclone.conf')
+        _import_waiting.discard(user_id)
+        await send_message(message, "✅ rclone.conf imported successfully.")
+    except Exception:
+        try:
+            await send_message(message, "❌ Failed to import rclone.conf.")
+        except Exception:
+            pass
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneDelete"))
+async def rclone_delete_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        import os
+        try:
+            if os.path.exists('rclone.conf'):
+                os.remove('rclone.conf')
+            # Refresh panel regardless
+            await rclone_panel_cb(client, cb)
+        except Exception:
+            await edit_message(cb.message, "❌ Failed to delete rclone.conf", markup=rclone_buttons())
+
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneScope"))
 async def rclone_scope_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
