@@ -27,6 +27,5 @@ class CMD(object):
     BAN = ["ban", f"ban@{bot}"]
     AUTH = ["auth", f"auth@{bot}"]
     LOG = ["log", f"log@{bot}"]
-    STATUS = ["status", f"status@{bot}"]
 
 cmd = CMD()

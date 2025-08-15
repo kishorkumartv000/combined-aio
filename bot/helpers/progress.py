@@ -135,20 +135,5 @@ class ProgressReporter:
             bar = self._make_bar(percent)
             idx = f" ({self.file_index}/{self.file_total})" if self.file_index and self.file_total else ""
             lines.append(f"📤 {bar} {percent}%{idx}")
-        # Bot uptime at the end
-        try:
-            import time
-            from bot.metrics import START_TIME
-            uptime_seconds = int(time.time() - START_TIME)
-            days, rem = divmod(uptime_seconds, 86400)
-            hours, rem = divmod(rem, 3600)
-            minutes, seconds = divmod(rem, 60)
-            if days:
-                uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
-            else:
-                uptime_str = f"{hours}h {minutes}m {seconds}s"
-            lines.append(f"⏱️ Uptime: {uptime_str}")
-        except Exception:
-            pass
 
         return "\n".join(lines)
