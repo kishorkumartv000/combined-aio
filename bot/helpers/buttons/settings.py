@@ -181,6 +181,18 @@ def rclone_buttons():
         )
     ])
 
+    # Actions: list remotes / send config
+    inline_keyboard.append([
+        InlineKeyboardButton(
+            text="List remotes",
+            callback_data='rcloneListRemotes'
+        ),
+        InlineKeyboardButton(
+            text="Send rclone.conf",
+            callback_data='rcloneSend'
+        )
+    ])
+
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
 

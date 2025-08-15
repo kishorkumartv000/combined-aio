@@ -85,6 +85,41 @@ async def rclone_delete_cb(client, cb:CallbackQuery):
         except Exception:
             await edit_message(cb.message, "❌ Failed to delete rclone.conf", markup=rclone_buttons())
 
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneListRemotes"))
+async def rclone_list_remotes_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        import asyncio
+        import os
+        if not os.path.exists('rclone.conf'):
+            return await edit_message(cb.message, "rclone.conf not found.", markup=rclone_buttons())
+        # Run rclone listremotes using our config
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                'rclone listremotes --config ./rclone.conf | cat',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            out, err = await proc.communicate()
+            if proc.returncode == 0:
+                remotes = out.decode().strip() or "(no remotes)"
+                await edit_message(cb.message, f"Available remotes:\n<code>{remotes}</code>", markup=rclone_buttons())
+            else:
+                await edit_message(cb.message, f"Failed to list remotes:\n<code>{err.decode().strip()}</code>", markup=rclone_buttons())
+        except Exception as e:
+            await edit_message(cb.message, f"Error: {e}", markup=rclone_buttons())
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneSend"))
+async def rclone_send_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        import os
+        if not os.path.exists('rclone.conf'):
+            return await edit_message(cb.message, "rclone.conf not found.", markup=rclone_buttons())
+        # Send the file as document
+        try:
+            await send_message(cb, './rclone.conf', 'doc')
+        except Exception:
+            await edit_message(cb.message, "❌ Failed to send rclone.conf", markup=rclone_buttons())
+
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneScope"))
 async def rclone_scope_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
