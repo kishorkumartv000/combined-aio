@@ -213,10 +213,30 @@ async def handle_dest_path_text(client, message: Message):
             pass
 
 # --- Browse-based destination path selection ---
+
+def _get_rclone_config_arg() -> str:
+    import os
+    from config import Config
+    try:
+        if getattr(Config, "RCLONE_CONFIG", None) and os.path.exists(Config.RCLONE_CONFIG):
+            return f'--config "{Config.RCLONE_CONFIG}"'
+    except Exception:
+        pass
+    for p in ("/workspace/rclone.conf", "rclone.conf"):
+        try:
+            if os.path.exists(p):
+                return f'--config "{p}"'
+        except Exception:
+            continue
+    return ""
+
 async def _list_remote_dirs(remote: str, path: str) -> list:
-    import asyncio, json
-    target = f"{remote}:{path}" if path else f"{remote}:"
-    cmd = f'rclone lsjson --dirs-only --config ./rclone.conf "{target}"'
+    import asyncio
+    remote = (remote or "").rstrip(":")
+    norm_path = (path or "").strip("/")
+    base = f"{remote}:" if norm_path == "" else f"{remote}:{norm_path}/"
+    cfg = _get_rclone_config_arg()
+    cmd = f'rclone lsf --dirs-only {cfg} "{base}"'
     proc = await asyncio.create_subprocess_shell(
         cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -224,12 +244,13 @@ async def _list_remote_dirs(remote: str, path: str) -> list:
     )
     out, err = await proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(err.decode().strip() or 'lsjson failed')
-    try:
-        entries = json.loads(out.decode())
-        return [e.get('Name') for e in entries if e.get('IsDir')]
-    except Exception:
-        raise RuntimeError('Failed to parse lsjson output')
+        raise RuntimeError(err.decode().strip() or 'lsf failed')
+    names = []
+    for line in out.decode().splitlines():
+        name = line.strip().rstrip("/")
+        if name:
+            names.append(name)
+    return names
 
 async def _render_browse(client, cb_or_msg, path: str):
     # Ensure remote exists
