@@ -120,6 +120,58 @@ async def rclone_send_cb(client, cb:CallbackQuery):
         except Exception:
             await edit_message(cb.message, "❌ Failed to send rclone.conf", markup=rclone_buttons())
 
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneSetDest"))
+async def rclone_set_dest_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        import asyncio, os
+        if not os.path.exists('rclone.conf'):
+            return await edit_message(cb.message, "rclone.conf not found.", markup=rclone_buttons())
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                'rclone listremotes --config ./rclone.conf | cat',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            out, err = await proc.communicate()
+            if proc.returncode != 0:
+                return await edit_message(cb.message, f"Failed to list remotes:\n<code>{err.decode().strip()}</code>", markup=rclone_buttons())
+            remotes = [r.strip(':') for r in out.decode().splitlines() if r.strip()]
+            if not remotes:
+                return await edit_message(cb.message, "No remotes configured.", markup=rclone_buttons())
+            # Build buttons for each remote; clicking sets base path to current subpath of dest if any
+            from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+            rows = []
+            for r in remotes:
+                # Preserve current suffix path after ':' if exists
+                current = getattr(bot_set, 'rclone_dest', None) or (Config.RCLONE_DEST or '')
+                suffix = ''
+                if current and ':' in current:
+                    try:
+                        suffix = current.split(':', 1)[1]
+                    except Exception:
+                        suffix = ''
+                label = f"{r}:{suffix}" if suffix else f"{r}:"
+                rows.append([InlineKeyboardButton(label, callback_data=f"rcloneApplyDest|{r}|{suffix}")])
+            rows.append([InlineKeyboardButton("Cancel", callback_data="rclonePanel")])
+            return await edit_message(cb.message, "Select destination remote:", markup=InlineKeyboardMarkup(rows))
+        except Exception as e:
+            return await edit_message(cb.message, f"Error: {e}", markup=rclone_buttons())
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneApplyDest\|"))
+async def rclone_apply_dest_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        try:
+            data = cb.data.split('|', 2)
+            remote = data[1]
+            suffix = data[2] if len(data) > 2 else ''
+            final = f"{remote}:{suffix}" if suffix else f"{remote}:"
+            from ..helpers.database.pg_impl import set_db
+            bot_set.rclone_dest = final
+            set_db.set_variable('RCLONE_DEST', final)
+            await rclone_panel_cb(client, cb)
+        except Exception:
+            await edit_message(cb.message, "❌ Failed to set destination", markup=rclone_buttons())
+
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneScope"))
 async def rclone_scope_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):

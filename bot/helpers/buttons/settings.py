@@ -193,6 +193,15 @@ def rclone_buttons():
         )
     ])
 
+    # Destination selector
+    dest_label = getattr(bot_set, 'rclone_dest', None) or (Config.RCLONE_DEST or '(unset)')
+    inline_keyboard.append([
+        InlineKeyboardButton(
+            text=f"Set Destination: {dest_label}",
+            callback_data='rcloneSetDest'
+        )
+    ])
+
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
 

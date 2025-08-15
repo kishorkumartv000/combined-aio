@@ -74,6 +74,10 @@ class BotSettings:
         rclone_scope, _ = set_db.get_variable('RCLONE_COPY_SCOPE')
         self.rclone_copy_scope = (rclone_scope or 'FILE').upper()
 
+        # New: Rclone destination (override env if present in DB)
+        db_dest, _ = set_db.get_variable('RCLONE_DEST')
+        self.rclone_dest = (db_dest or Config.RCLONE_DEST or '').strip()
+
         self.album_zip = _to_bool(__getvalue__('ALBUM_ZIP'))
         self.playlist_zip = _to_bool(__getvalue__('PLAYLIST_ZIP'))
         self.artist_zip = _to_bool(__getvalue__('ARTIST_ZIP'))

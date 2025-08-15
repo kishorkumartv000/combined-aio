@@ -408,7 +408,8 @@ async def rclone_upload(user, path, base_path):
         base_path: Base path used to compute relative path for remote
     """
     # Ensure destination is configured
-    if not Config.RCLONE_DEST:
+    dest_root = (getattr(bot_set, 'rclone_dest', None) or Config.RCLONE_DEST)
+    if not dest_root:
         return None, None
 
     # Normalize source path
@@ -446,23 +447,23 @@ async def rclone_upload(user, path, base_path):
         if is_directory:
             source_for_copy = abs_path
             relative_path = _compute_relative(abs_path, base_path)
-            dest_path = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+            dest_path = f"{dest_root}/{relative_path}".rstrip("/")
         else:
             # Copy the parent folder that contains the file
             parent_dir_abs = os.path.dirname(abs_path)
             source_for_copy = parent_dir_abs
             relative_path = _compute_relative(parent_dir_abs, base_path)
-            dest_path = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+            dest_path = f"{dest_root}/{relative_path}".rstrip("/")
     else:
         # FILE scope: keep existing behavior
         relative_path = _compute_relative(abs_path, base_path)
         if is_directory:
             source_for_copy = abs_path
-            dest_path = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+            dest_path = f"{dest_root}/{relative_path}".rstrip("/")
         else:
             parent_dir = os.path.dirname(relative_path)
             source_for_copy = abs_path
-            dest_path = f"{Config.RCLONE_DEST}/{parent_dir}".rstrip("/")
+            dest_path = f"{dest_root}/{parent_dir}".rstrip("/")
 
     # 1) Copy source to remote destination
     copy_cmd = f'rclone copy --config ./rclone.conf "{source_for_copy}" "{dest_path}"'
@@ -487,10 +488,7 @@ async def rclone_upload(user, path, base_path):
     # Rclone share link
     if bot_set.link_options in ['RCLONE', 'Both']:
         # Link target should reflect the relative root of the uploaded entity
-        if scope == 'FOLDER':
-            link_target = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
-        else:
-            link_target = f"{Config.RCLONE_DEST}/{relative_path}".rstrip("/")
+        link_target = f"{dest_root}/{relative_path}".rstrip("/")
         link_cmd = f'rclone link --config ./rclone.conf "{link_target}"'
         link_task = await asyncio.create_subprocess_shell(
             link_cmd,
