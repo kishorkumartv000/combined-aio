@@ -175,7 +175,7 @@ async def rclone_set_dest_path_cb(client, cb:CallbackQuery):
         _dest_path_waiting.add(cb.from_user.id)
         await edit_message(cb.message, "Send destination path suffix (e.g., AppleMusic or AppleMusic/alac). Empty to use remote root.")
 
-@Client.on_message(filters.text)
+@Client.on_message(filters.text, group=10)
 async def handle_dest_path_text(client, message: Message):
     try:
         user_id = message.from_user.id if message.from_user else None
