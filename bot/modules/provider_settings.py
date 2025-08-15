@@ -149,6 +149,8 @@ async def apple_wrapper_setup_cb(c: Client, cb: CallbackQuery):
         await edit_message(cb.message, "We'll set up the Wrapper. Please send your Apple ID username.\n\nYou can cancel anytime by sending /cancel.", InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="appleP")]]))
         # Mark state for this user
         from ..helpers.state import conversation_state
+        # Also clear any other pending flows for safety
+        await conversation_state.clear(cb.from_user.id)
         await conversation_state.start(cb.from_user.id, "apple_setup_username", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
 
 
