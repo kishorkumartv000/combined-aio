@@ -1,6 +1,6 @@
 from bot import CMD
 from pyrogram import Client, filters
-from pyrogram.types import CallbackQuery, Message
+from pyrogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup
 
 import bot.helpers.translations as lang
 
@@ -8,6 +8,7 @@ from ..settings import bot_set
 from ..helpers.buttons.settings import *
 from ..helpers.database.pg_impl import set_db
 from ..helpers.message import send_message, edit_message, check_user, fetch_user_details
+from ..helpers.state import conversation_state
 
 
 
@@ -139,7 +140,6 @@ async def rclone_select_remote_cb(client, cb:CallbackQuery):
             if not remotes:
                 return await edit_message(cb.message, "No remotes configured.", markup=rclone_buttons())
             # Build buttons for each remote
-            from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
             rows = []
             for r in remotes:
                 rows.append([InlineKeyboardButton(r, callback_data=f"rcloneApplyRemote|{r}")])
@@ -172,6 +172,17 @@ _dest_path_waiting = set()
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneSetDestPath"))
 async def rclone_set_dest_path_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
+        # Offer both methods: type text or browse
+        buttons = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Type path manually", callback_data="rcloneDestPathType")],
+            [InlineKeyboardButton("Browse folders", callback_data="rcloneDestPathBrowseStart")],
+            [InlineKeyboardButton("🔙 Back", callback_data="rclonePanel")]
+        ])
+        await edit_message(cb.message, "Choose how to set destination path:", buttons)
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathType$"))
+async def rclone_dest_path_type_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
         _dest_path_waiting.add(cb.from_user.id)
         await edit_message(cb.message, "Send destination path suffix (e.g., AppleMusic or AppleMusic/alac). Empty to use remote root.")
 
@@ -201,18 +212,108 @@ async def handle_dest_path_text(client, message: Message):
         except Exception:
             pass
 
-@Client.on_callback_query(filters.regex(pattern=r"^rcloneScope"))
-async def rclone_scope_cb(client, cb:CallbackQuery):
+# --- Browse-based destination path selection ---
+async def _list_remote_dirs(remote: str, path: str) -> list:
+    import asyncio, json
+    target = f"{remote}:{path}" if path else f"{remote}:"
+    cmd = f'rclone lsjson --dirs-only --config ./rclone.conf "{target}"'
+    proc = await asyncio.create_subprocess_shell(
+        cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    out, err = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(err.decode().strip() or 'lsjson failed')
+    try:
+        entries = json.loads(out.decode())
+        return [e.get('Name') for e in entries if e.get('IsDir')]
+    except Exception:
+        raise RuntimeError('Failed to parse lsjson output')
+
+async def _render_browse(client, cb_or_msg, path: str):
+    # Ensure remote exists
+    remote = getattr(bot_set, 'rclone_remote', '')
+    if not remote:
+        return await edit_message(cb_or_msg.message if isinstance(cb_or_msg, CallbackQuery) else cb_or_msg, "Please select a remote first.", rclone_buttons())
+    try:
+        names = await _list_remote_dirs(remote, path)
+    except Exception as e:
+        return await edit_message(cb_or_msg.message if isinstance(cb_or_msg, CallbackQuery) else cb_or_msg, f"Failed to list folders: {e}", rclone_buttons())
+
+    # Save current state
+    user_id = cb_or_msg.from_user.id if isinstance(cb_or_msg, CallbackQuery) else cb_or_msg.from_user.id
+    state = await conversation_state.get(user_id) or {}
+    data = state.get('data', {})
+    data.update({
+        'browse_path': path,
+        'browse_entries': names
+    })
+    await conversation_state.update(user_id, stage='rclone_browse', **data)
+
+    # Build UI
+    rows = []
+    for idx, name in enumerate(names[:25]):
+        rows.append([InlineKeyboardButton(name, callback_data=f"rcloneDestPathCd|{idx}")])
+    rows.append([InlineKeyboardButton("Select here", callback_data="rcloneDestPathSelectHere")])
+    # Up button if not root
+    if path:
+        rows.append([InlineKeyboardButton("⬆️ Up", callback_data="rcloneDestPathUp")])
+    rows.append([InlineKeyboardButton("Cancel", callback_data="rclonePanel")])
+
+    title = f"Browsing: /{path}" if path else "Browsing: /"
+    await edit_message(cb_or_msg.message if isinstance(cb_or_msg, CallbackQuery) else cb_or_msg, title, InlineKeyboardMarkup(rows))
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathBrowseStart$"))
+async def rclone_dest_path_browse_start_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
-        # Toggle between FILE and FOLDER
-        current = getattr(bot_set, 'rclone_copy_scope', 'FILE').upper()
-        next_value = 'FOLDER' if current == 'FILE' else 'FILE'
-        bot_set.rclone_copy_scope = next_value
-        set_db.set_variable('RCLONE_COPY_SCOPE', next_value)
+        # Initialize browse at current path if set, else root
+        start_path = getattr(bot_set, 'rclone_dest_path', '')
+        await _render_browse(client, cb, start_path)
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathCd\|"))
+async def rclone_dest_path_cd_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        state = await conversation_state.get(cb.from_user.id) or {}
+        data = state.get('data', {})
+        entries = data.get('browse_entries') or []
         try:
-            await rclone_panel_cb(client, cb)
-        except:
-            pass
+            idx = int(cb.data.split('|', 1)[1])
+        except Exception:
+            idx = -1
+        if idx < 0 or idx >= len(entries):
+            return await _render_browse(client, cb, data.get('browse_path', ''))
+        name = entries[idx]
+        base = data.get('browse_path', '')
+        new_path = f"{base}/{name}" if base else name
+        await _render_browse(client, cb, new_path)
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathUp$"))
+async def rclone_dest_path_up_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        state = await conversation_state.get(cb.from_user.id) or {}
+        data = state.get('data', {})
+        base = data.get('browse_path', '')
+        if not base:
+            return await _render_browse(client, cb, '')
+        parts = [p for p in base.split('/') if p]
+        new_path = '/'.join(parts[:-1])
+        await _render_browse(client, cb, new_path)
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathSelectHere$"))
+async def rclone_dest_path_select_here_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        state = await conversation_state.get(cb.from_user.id) or {}
+        data = state.get('data', {})
+        path = data.get('browse_path', '')
+        # Persist
+        bot_set.rclone_dest_path = path
+        remote = getattr(bot_set, 'rclone_remote', '')
+        final = f"{remote}:{path}" if remote else path
+        bot_set.rclone_dest = final
+        set_db.set_variable('RCLONE_DEST_PATH', path)
+        set_db.set_variable('RCLONE_DEST', final)
+        await rclone_panel_cb(client, cb)
 
 
 @Client.on_callback_query(filters.regex(pattern=r"^upload"))
