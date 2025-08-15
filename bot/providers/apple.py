@@ -51,15 +51,6 @@ class AppleMusicProvider:
         label = f"Apple Music • ID: {user.get('task_id','?')}"
         reporter = ProgressReporter(user['bot_msg'], label=label)
         user['progress'] = reporter
-        # Attach to task manager for /status snapshots
-        try:
-            from bot.helpers.tasks import task_manager
-            if user.get('task_id'):
-                import asyncio as _asyncio
-                # Fire and forget; no need to await strictly here
-                _asyncio.create_task(task_manager.attach_progress(user['task_id'], reporter))
-        except Exception:
-            pass
         await reporter.set_stage("Preparing")
         
         # Download content
