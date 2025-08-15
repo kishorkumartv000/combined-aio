@@ -152,6 +152,17 @@ def core_buttons():
 def rclone_buttons():
     inline_keyboard = []
 
+    # Show currently used remote:path
+    current_remote = getattr(bot_set, 'rclone_remote', '') or '(unset)'
+    current_path = getattr(bot_set, 'rclone_dest_path', '')
+    current_display = f"{current_remote}:{current_path}" if current_path else (f"{current_remote}:" if current_remote != '(unset)' else '(unset)')
+    inline_keyboard.append([
+        InlineKeyboardButton(
+            text=f"Using: {current_display}",
+            callback_data='noop'
+        )
+    ])
+
     # Status line
     status_text = "Present" if os.path.exists('rclone.conf') else "Not found"
     inline_keyboard.append([
@@ -193,12 +204,16 @@ def rclone_buttons():
         )
     ])
 
-    # Destination selector
+    # Destination controls (separate remote and path)
     dest_label = getattr(bot_set, 'rclone_dest', None) or (Config.RCLONE_DEST or '(unset)')
     inline_keyboard.append([
         InlineKeyboardButton(
-            text=f"Set Destination: {dest_label}",
-            callback_data='rcloneSetDest'
+            text="Select Remote",
+            callback_data='rcloneSelectRemote'
+        ),
+        InlineKeyboardButton(
+            text="Set Destination Path",
+            callback_data='rcloneSetDestPath'
         )
     ])
 

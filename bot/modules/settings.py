@@ -120,8 +120,8 @@ async def rclone_send_cb(client, cb:CallbackQuery):
         except Exception:
             await edit_message(cb.message, "❌ Failed to send rclone.conf", markup=rclone_buttons())
 
-@Client.on_callback_query(filters.regex(pattern=r"^rcloneSetDest"))
-async def rclone_set_dest_cb(client, cb:CallbackQuery):
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneSelectRemote"))
+async def rclone_select_remote_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         import asyncio, os
         if not os.path.exists('rclone.conf'):
@@ -138,39 +138,68 @@ async def rclone_set_dest_cb(client, cb:CallbackQuery):
             remotes = [r.strip(':') for r in out.decode().splitlines() if r.strip()]
             if not remotes:
                 return await edit_message(cb.message, "No remotes configured.", markup=rclone_buttons())
-            # Build buttons for each remote; clicking sets base path to current subpath of dest if any
+            # Build buttons for each remote
             from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
             rows = []
             for r in remotes:
-                # Preserve current suffix path after ':' if exists
-                current = getattr(bot_set, 'rclone_dest', None) or (Config.RCLONE_DEST or '')
-                suffix = ''
-                if current and ':' in current:
-                    try:
-                        suffix = current.split(':', 1)[1]
-                    except Exception:
-                        suffix = ''
-                label = f"{r}:{suffix}" if suffix else f"{r}:"
-                rows.append([InlineKeyboardButton(label, callback_data=f"rcloneApplyDest|{r}|{suffix}")])
+                rows.append([InlineKeyboardButton(r, callback_data=f"rcloneApplyRemote|{r}")])
             rows.append([InlineKeyboardButton("Cancel", callback_data="rclonePanel")])
-            return await edit_message(cb.message, "Select destination remote:", markup=InlineKeyboardMarkup(rows))
+            return await edit_message(cb.message, "Select remote:", markup=InlineKeyboardMarkup(rows))
         except Exception as e:
             return await edit_message(cb.message, f"Error: {e}", markup=rclone_buttons())
 
-@Client.on_callback_query(filters.regex(pattern=r"^rcloneApplyDest\|"))
-async def rclone_apply_dest_cb(client, cb:CallbackQuery):
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneApplyRemote\|"))
+async def rclone_apply_remote_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         try:
-            data = cb.data.split('|', 2)
-            remote = data[1]
-            suffix = data[2] if len(data) > 2 else ''
-            final = f"{remote}:{suffix}" if suffix else f"{remote}:"
-            from ..helpers.database.pg_impl import set_db
-            bot_set.rclone_dest = final
-            set_db.set_variable('RCLONE_DEST', final)
+            remote = cb.data.split('|', 1)[1]
+            # Preserve current path
+            suffix = getattr(bot_set, 'rclone_dest_path', '')
+            bot_set.rclone_remote = remote
+            if bot_set.rclone_remote:
+                bot_set.rclone_dest = f"{bot_set.rclone_remote}:{suffix}" if suffix else f"{bot_set.rclone_remote}:"
+            else:
+                bot_set.rclone_dest = ''
+            set_db.set_variable('RCLONE_REMOTE', bot_set.rclone_remote)
+            set_db.set_variable('RCLONE_DEST', bot_set.rclone_dest)
             await rclone_panel_cb(client, cb)
         except Exception:
-            await edit_message(cb.message, "❌ Failed to set destination", markup=rclone_buttons())
+            await edit_message(cb.message, "❌ Failed to set remote", markup=rclone_buttons())
+
+# Capture destination path via next text message after tapping the button
+_dest_path_waiting = set()
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneSetDestPath"))
+async def rclone_set_dest_path_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        _dest_path_waiting.add(cb.from_user.id)
+        await edit_message(cb.message, "Send destination path suffix (e.g., AppleMusic or AppleMusic/alac). Empty to use remote root.")
+
+@Client.on_message(filters.text)
+async def handle_dest_path_text(client, message: Message):
+    try:
+        user_id = message.from_user.id if message.from_user else None
+        if user_id not in _dest_path_waiting:
+            return
+        text = (message.text or '').strip()
+        # Update bot_set and DB
+        bot_set.rclone_dest_path = text
+        # Build final
+        remote = getattr(bot_set, 'rclone_remote', '')
+        if remote:
+            final = f"{remote}:{text}" if text else f"{remote}:"
+        else:
+            final = text
+        bot_set.rclone_dest = final
+        set_db.set_variable('RCLONE_DEST_PATH', text)
+        set_db.set_variable('RCLONE_DEST', final)
+        _dest_path_waiting.discard(user_id)
+        await send_message(message, f"✅ Destination set to: <code>{final or '(unset)'}</code>")
+    except Exception:
+        try:
+            await send_message(message, "❌ Failed to set destination path.")
+        except Exception:
+            pass
 
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneScope"))
 async def rclone_scope_cb(client, cb:CallbackQuery):

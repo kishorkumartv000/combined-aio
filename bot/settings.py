@@ -74,9 +74,32 @@ class BotSettings:
         rclone_scope, _ = set_db.get_variable('RCLONE_COPY_SCOPE')
         self.rclone_copy_scope = (rclone_scope or 'FILE').upper()
 
-        # New: Rclone destination (override env if present in DB)
-        db_dest, _ = set_db.get_variable('RCLONE_DEST')
-        self.rclone_dest = (db_dest or Config.RCLONE_DEST or '').strip()
+        # New: Rclone destination parts (remote and path)
+        db_remote, _ = set_db.get_variable('RCLONE_REMOTE')
+        db_dest_path, _ = set_db.get_variable('RCLONE_DEST_PATH')
+        env_full = (Config.RCLONE_DEST or '').strip() if Config.RCLONE_DEST else ''
+        # Back-compat: parse remote:path from env_full or DB full if present
+        db_full, _ = set_db.get_variable('RCLONE_DEST')
+        full = (db_full or env_full or '').strip()
+        parsed_remote = ''
+        parsed_path = ''
+        if full and ':' in full:
+            try:
+                parsed_remote, parsed_path = full.split(':', 1)
+            except Exception:
+                parsed_remote = full.rstrip(':')
+                parsed_path = ''
+        # Prefer explicit DB parts, else parsed, else empty
+        self.rclone_remote = (db_remote or parsed_remote or '').strip()
+        self.rclone_dest_path = (db_dest_path if db_dest_path is not None else parsed_path).strip()
+        # Compose effective destination
+        if self.rclone_remote:
+            if self.rclone_dest_path:
+                self.rclone_dest = f"{self.rclone_remote}:{self.rclone_dest_path}"
+            else:
+                self.rclone_dest = f"{self.rclone_remote}:"
+        else:
+            self.rclone_dest = full
 
         self.album_zip = _to_bool(__getvalue__('ALBUM_ZIP'))
         self.playlist_zip = _to_bool(__getvalue__('PLAYLIST_ZIP'))
