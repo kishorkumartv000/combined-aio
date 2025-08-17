@@ -760,8 +760,13 @@ async def _rclone_cc_render_browse(client, cb_or_msg, which: str, include_files:
         selected = set(data.get('cc_src_selected') or [])  # keys: dir:Name or file:Name
 
     rows = []
-    # When browsing source in CC, show multi-select toggle and marks
+    # When browsing source in CC, show copy/move mode toggle and multi-select toggle
     if which == 'src':
+        current_mode = (data.get('cc_mode') or 'copy').lower()
+        rows.append([
+            InlineKeyboardButton(f"Copy {'✅' if current_mode == 'copy' else ''}", callback_data="rcloneCcMode|copy"),
+            InlineKeyboardButton(f"Move {'✅' if current_mode == 'move' else ''}", callback_data="rcloneCcMode|move")
+        ])
         rows.append([
             InlineKeyboardButton(f"Multi-select: {'ON ✅' if src_multi else 'OFF'}", callback_data=f"rcloneCcMultiToggle|{which}")
         ])
@@ -1239,4 +1244,17 @@ async def rclone_manage_start_cb(client, cb:CallbackQuery):
             cc_src_selected=[],
             src_page=0
         )
+        await _rclone_cc_render_browse(client, cb, which='src', include_files=True)
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneCcMode\|"))
+async def rclone_cc_mode_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        try:
+            mode = cb.data.split('|', 1)[1].strip().lower()
+            if mode not in ('copy', 'move'):
+                return
+        except Exception:
+            return
+        await conversation_state.set_data(cb.from_user.id, 'cc_mode', mode)
         await _rclone_cc_render_browse(client, cb, which='src', include_files=True)
