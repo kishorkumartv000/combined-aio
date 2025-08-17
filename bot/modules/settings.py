@@ -987,11 +987,14 @@ async def _rclone_manage_render_source(client, cb:CallbackQuery, mode: str):
     state = await conversation_state.get(cb.from_user.id) or {}
     data = state.get('data', {})
     src_remote = data.get('src_remote')
+    base_base = (data.get('base') or '').strip('/')
     base_path = data.get('src_path', '')
+    # Build effective path with remote base if any
+    effective_path = f"{base_base}/{base_path}".strip('/') if base_base else base_path
     include_files = True
     # List items at current base_path
     try:
-        dirs, files = await _rclone_cc_list(src_remote, base_path, include_files)
+        dirs, files = await _rclone_cc_list(src_remote, effective_path, include_files)
     except Exception as e:
         return await edit_message(cb.message, f"Failed to list: {e}", rclone_buttons())
     await conversation_state.update(cb.from_user.id, **{'src_entries': {'dirs': dirs, 'files': files}})
@@ -1034,7 +1037,9 @@ async def _rclone_manage_render_source(client, cb:CallbackQuery, mode: str):
     rows.append([InlineKeyboardButton("Select this folder", callback_data="rcloneManageSelectFolder")])
     rows.append([InlineKeyboardButton("Cancel", callback_data="rclonePanel")])
 
-    title = f"Manage Uploaded • Source {src_remote}: /{base_path or ''}"
+    # Show effective path in title
+    title_path = effective_path or ''
+    title = f"Manage Uploaded • Source {src_remote}: /{title_path}"
     await edit_message(cb.message, title, InlineKeyboardMarkup(rows))
 
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneManageMode\|"))

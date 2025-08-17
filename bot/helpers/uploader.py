@@ -521,9 +521,23 @@ async def rclone_upload(user, path, base_path):
         index_link = f"{Config.INDEX_LINK}/{relative_path}".replace(" ", "%20")
 
     # Remote info for post-upload manage flow
-    remote_name = getattr(bot_set, 'rclone_remote', '') or (Config.RCLONE_DEST.split(':',1)[0] if Config.RCLONE_DEST and ':' in Config.RCLONE_DEST else '')
+    # Parse remote name and base path from dest_root (format remote:base)
+    remote_name = ''
+    remote_base = ''
+    try:
+        if dest_root and ':' in dest_root:
+            remote_name, remote_base = dest_root.split(':', 1)
+            remote_base = remote_base.strip('/')
+        else:
+            remote_name = (getattr(bot_set, 'rclone_remote', '') or dest_root or '').rstrip(':')
+            remote_base = ''
+    except Exception:
+        remote_name = (getattr(bot_set, 'rclone_remote', '') or (Config.RCLONE_DEST.split(':',1)[0] if Config.RCLONE_DEST and ':' in Config.RCLONE_DEST else '')).rstrip(':')
+        remote_base = ''
+
     remote_info = {
         'remote': remote_name,
+        'base': remote_base,
         'path': relative_path,
         'is_dir': is_directory
     }
@@ -545,6 +559,7 @@ async def _post_rclone_manage_button(user, remote_info: dict):
             src_file = rel_path
         await conversation_state.start(user['user_id'], 'rclone_manage', {
             'src_remote': src_remote,
+            'base': remote_info.get('base') if isinstance(remote_info, dict) else None,
             'src_path': src_path,
             'src_file': src_file,
             'dst_remote': None,
