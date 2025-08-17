@@ -109,6 +109,13 @@ class BotSettings:
         video_doc, _ = set_db.get_variable('VIDEO_AS_DOCUMENT')
         self.video_as_document = bool(video_doc) if isinstance(video_doc, bool) else (str(video_doc).lower() == 'true')
 
+        # New: whether to extract embedded cover artwork
+        try:
+            val = __getvalue__('EXTRACT_EMBEDDED_COVER') or Config.EXTRACT_EMBEDDED_COVER
+        except Exception:
+            val = Config.EXTRACT_EMBEDDED_COVER
+        self.extract_embedded_cover = _to_bool(val)
+
         self.clients = []
         self.download_history = download_history
 

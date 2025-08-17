@@ -629,7 +629,7 @@ async def extract_audio_metadata(file_path: str) -> dict:
                 'artist': audio.get('\xa9ART', ['Unknown Artist'])[0],
                 'album': audio.get('\xa9alb', ['Unknown Album'])[0],
                 'duration': int(audio.info.length),
-                'thumbnail': extract_cover_art(audio, file_path)
+                'thumbnail': extract_cover_art(audio, file_path) if getattr(bot_set, 'extract_embedded_cover', True) else None
             }
         else:
             # Handle other audio formats like mp3, flac, etc.
@@ -639,7 +639,7 @@ async def extract_audio_metadata(file_path: str) -> dict:
                 'artist': audio.get('artist', ['Unknown Artist'])[0],
                 'album': audio.get('album', ['Unknown Album'])[0],
                 'duration': int(audio.info.length),
-                'thumbnail': extract_cover_art(audio, file_path) if hasattr(audio, 'pictures') else None
+                'thumbnail': (extract_cover_art(audio, file_path) if hasattr(audio, 'pictures') and getattr(bot_set, 'extract_embedded_cover', True) else None)
             }
     except Exception as e:
         LOGGER.error(f"Audio metadata extraction failed: {str(e)}")
@@ -661,7 +661,7 @@ async def extract_video_metadata(file_path: str) -> dict:
                 'title': video.get('\xa9nam', ['Unknown'])[0],
                 'artist': video.get('\xa9ART', ['Unknown Artist'])[0],
                 'duration': int(video.info.length),
-                'thumbnail': extract_cover_art(video, file_path),
+                'thumbnail': extract_cover_art(video, file_path) if getattr(bot_set, 'extract_embedded_cover', True) else None,
                 'width': video.get('width', [1920])[0],
                 'height': video.get('height', [1080])[0]
             }
@@ -693,7 +693,7 @@ async def extract_apple_metadata(file_path: str) -> dict:
                 'artist': audio.get('artist', ['Unknown Artist'])[0],
                 'album': audio.get('album', ['Unknown Album'])[0],
                 'duration': int(audio.info.length),
-                'thumbnail': extract_cover_art(audio, file_path) if hasattr(audio, 'pictures') else None
+                'thumbnail': (extract_cover_art(audio, file_path) if hasattr(audio, 'pictures') and getattr(bot_set, 'extract_embedded_cover', True) else None)
             }
     except Exception as e:
         LOGGER.error(f"Apple metadata extraction failed: {str(e)}")

@@ -378,6 +378,19 @@ async def video_upload_type_cb(client, cb:CallbackQuery):
             pass
 
 
+@Client.on_callback_query(filters.regex(pattern=r"^toggleExtractCover$"))
+async def toggle_extract_cover_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        try:
+            bot_set.extract_embedded_cover = not bool(getattr(bot_set, 'extract_embedded_cover', True))
+            set_db.set_variable('EXTRACT_EMBEDDED_COVER', bot_set.extract_embedded_cover)
+        except Exception:
+            pass
+        try:
+            await core_cb(client, cb)
+        except:
+            pass
+
 @Client.on_callback_query(filters.regex(pattern=r"^linkOption"))
 async def link_option_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
