@@ -1369,38 +1369,58 @@ async def rclone_manage_do_cb(client, cb:CallbackQuery):
         base = (data.get('base') or '').strip('/')
         dst_path = data.get('dst_path', '')
         cfg = _get_rclone_config_arg()
-        # Build list of sources
-        srcs = []
+        # Build list of sources and their types
+        srcs: list[str] = []
+        type_by: dict[str, str] = {}
         if data.get('src_multi') and (data.get('src_selected') or []):
             for key in (data.get('src_selected') or []):
                 try:
-                    _, name = key.split(':', 1)
+                    typ, name = key.split(':', 1)
                     rel = f"{data.get('src_path','').strip('/')}/{name}" if data.get('src_path') else name
                     srcs.append(rel)
+                    type_by[rel] = typ
                 except Exception:
                     continue
         else:
             src_rel = (data.get('src_file') or data.get('src_path') or '').strip('/')
             if src_rel:
                 srcs.append(src_rel)
+                type_by[src_rel] = 'file' if data.get('src_file') else 'dir'
         if not src_remote or not dst_remote or not srcs:
             return await edit_message(cb.message, "Missing selection.", rclone_buttons())
-        # Build command with multiple sources
-        quoted_srcs = " ".join([f'"{src_remote}:{(base+'/'+s if base else s)}"' for s in srcs])
-        dst_full = f"{dst_remote}:{dst_path}" if dst_path else f"{dst_remote}:"
+        # Destination base
+        dst_full_base = f"{dst_remote}:{dst_path}" if dst_path else f"{dst_remote}:"
         mode = (data.get('cc_mode') or 'copy').lower()
         cmd = 'move' if mode == 'move' else 'copy'
         try:
-            await edit_message(cb.message, f"Starting {cmd}...\n{chr(10).join([f'<code>{src_remote}:{(base+'/'+s if base else s)}</code>' for s in srcs])}\n→ <code>{dst_full}</code>")
-            proc = await asyncio.create_subprocess_shell(
-                f"rclone {cmd} {cfg} {quoted_srcs} \"{dst_full}\"",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            out, err = await proc.communicate()
-            if proc.returncode == 0:
-                await edit_message(cb.message, f"✅ {cmd.capitalize()} completed successfully.", rclone_buttons())
+            # Announce start
+            src_lines = "\n".join([f"<code>{src_remote}:{(base+'/'+s if base else s)}</code>" for s in srcs])
+            await edit_message(cb.message, f"Starting {cmd}...\n{src_lines}\n→ <code>{dst_full_base}</code>")
+            successes = 0
+            failures = []
+            for s in srcs:
+                src_full = f"{src_remote}:{(base+'/'+s if base else s)}"
+                is_dir = (type_by.get(s) == 'dir')
+                base_name = s.strip('/').split('/')[-1] if s else ''
+                dst_specific = dst_full_base.rstrip('/') + (f"/{base_name}" if is_dir and base_name else '')
+                proc = await asyncio.create_subprocess_shell(
+                    f"rclone {cmd} {cfg} \"{src_full}\" \"{dst_specific}\"",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                out, err = await proc.communicate()
+                if proc.returncode == 0:
+                    successes += 1
+                else:
+                    try:
+                        failures.append(f"{base_name or s}: {(err.decode().strip() or out.decode().strip())}")
+                    except Exception:
+                        failures.append(f"{base_name or s}: failed")
+            if failures:
+                fail_text = "\n".join([f"• <code>{f}</code>" for f in failures[:5]])
+                more = f"\n(and {len(failures)-5} more)" if len(failures) > 5 else ""
+                await edit_message(cb.message, f"✅ {successes} succeeded, ❌ {len(failures)} failed:{more}\n{fail_text}", rclone_buttons())
             else:
-                await edit_message(cb.message, f"❌ {cmd.capitalize()} failed:\n<code>{(err.decode().strip() or out.decode().strip())}</code>", rclone_buttons())
+                await edit_message(cb.message, f"✅ {cmd.capitalize()} completed for {successes} item(s).", rclone_buttons())
         except Exception as e:
             await edit_message(cb.message, f"❌ Error: {e}", rclone_buttons())
