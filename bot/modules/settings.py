@@ -675,14 +675,46 @@ async def _rclone_cc_render_browse(client, cb_or_msg, which: str, include_files:
         return await edit_message(cb_or_msg.message if isinstance(cb_or_msg, CallbackQuery) else cb_or_msg, f"Failed to list: {e}", rclone_buttons())
     # Save entries
     await conversation_state.update(cb_or_msg.from_user.id, **{f'{which}_entries': {'dirs': dirs, 'files': files}})
-    rows = []
-    # Show dirs
-    for i, name in enumerate(dirs[:20]):
-        rows.append([InlineKeyboardButton(f"📁 {name}", callback_data=f"rcloneCcCd|{which}|{i}")])
-    # Show files if enabled
+
+    # Pagination settings
+    PAGE_SIZE = 15
+    page_key = f"{which}_page"
+    try:
+        page = int(data.get(page_key, 0) or 0)
+    except Exception:
+        page = 0
+
+    # Build combined list with type tagging but keep original indices
+    combined = [("dir", name, i) for i, name in enumerate(dirs)]
     if include_files:
-        for i, name in enumerate(files[:20]):
-            rows.append([InlineKeyboardButton(f"📄 {name}", callback_data=f"rcloneCcPickFile|{which}|{i}")])
+        combined += [("file", name, i) for i, name in enumerate(files)]
+    total = len(combined)
+
+    # Clamp page
+    max_page = 0 if total == 0 else (total - 1) // PAGE_SIZE
+    if page < 0 or page > max_page:
+        page = 0
+        await conversation_state.update(cb_or_msg.from_user.id, **{page_key: page})
+
+    start = page * PAGE_SIZE
+    end = min(start + PAGE_SIZE, total)
+
+    rows = []
+    for etype, name, idx in combined[start:end]:
+        if etype == 'dir':
+            rows.append([InlineKeyboardButton(f"📁 {name}", callback_data=f"rcloneCcCd|{which}|{idx}")])
+        else:
+            rows.append([InlineKeyboardButton(f"📄 {name}", callback_data=f"rcloneCcPickFile|{which}|{idx}")])
+
+    # Page navigation
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"rcloneCcPage|{which}|{page-1}"))
+    if end < total:
+        nav.append(InlineKeyboardButton("➡️ Next", callback_data=f"rcloneCcPage|{which}|{page+1}"))
+    if nav:
+        rows.append(nav)
+
     # Actions
     if base_path:
         rows.append([InlineKeyboardButton("⬆️ Up", callback_data=f"rcloneCcUp|{which}")])
@@ -703,7 +735,7 @@ async def rclone_cc_cd_cb(client, cb:CallbackQuery):
             return await _rclone_cc_render_browse(client, cb, which=which, include_files=(which=='src'))
         base = state.get('data', {}).get(f'{which}_path', '')
         new_path = f"{base}/{entries[idx]}" if base else entries[idx]
-        await conversation_state.update(cb.from_user.id, **{f'{which}_path': new_path})
+        await conversation_state.update(cb.from_user.id, **{f'{which}_path': new_path, f'{which}_page': 0})
         await _rclone_cc_render_browse(client, cb, which=which, include_files=(which=='src'))
 
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneCcUp\|"))
@@ -715,7 +747,7 @@ async def rclone_cc_up_cb(client, cb:CallbackQuery):
         base = state.get('data', {}).get(f'{which}_path', '')
         parts = [p for p in base.split('/') if p]
         new_path = '/'.join(parts[:-1])
-        await conversation_state.update(cb.from_user.id, **{f'{which}_path': new_path})
+        await conversation_state.update(cb.from_user.id, **{f'{which}_path': new_path, f'{which}_page': 0})
         await _rclone_cc_render_browse(client, cb, which=which, include_files=(which=='src'))
 
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneCcPickFile\|"))
@@ -745,7 +777,7 @@ async def rclone_cc_select_folder_cb(client, cb:CallbackQuery):
         state = await conversation_state.get(cb.from_user.id) or {}
         base = state.get('data', {}).get(f'{which}_path', '')
         if which == 'src':
-            await conversation_state.update(cb.from_user.id, src_file=None)
+            await conversation_state.update(cb.from_user.id, src_file=None, src_page=0)
             # Proceed to destination remote select
             await _rclone_cc_pick_destination_remote(client, cb)
         else:
@@ -867,3 +899,15 @@ def _get_rclone_config_arg() -> str:
         except Exception:
             continue
     return ""
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneCcPage\|"))
+async def rclone_cc_page_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        try:
+            _, which, page_str = cb.data.split('|', 2)
+            new_page = int(page_str)
+        except Exception:
+            return
+        await conversation_state.set_data(cb.from_user.id, f"{which}_page", new_page)
+        await _rclone_cc_render_browse(client, cb, which=which, include_files=(which=='src'))
