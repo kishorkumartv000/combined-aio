@@ -274,10 +274,39 @@ async def _render_browse(client, cb_or_msg, path: str):
     })
     await conversation_state.update(user_id, stage='rclone_browse', **data)
 
-    # Build UI
+    # Build UI with pagination
+    PAGE_SIZE = 15
+    # Read current page from state
+    user_id = cb_or_msg.from_user.id if isinstance(cb_or_msg, CallbackQuery) else cb_or_msg.from_user.id
+    st = await conversation_state.get(user_id) or {}
+    pg = 0
+    try:
+        pg = int((st.get('data') or {}).get('browse_page', 0) or 0)
+    except Exception:
+        pg = 0
+    total = len(names)
+    max_page = 0 if total == 0 else (total - 1) // PAGE_SIZE
+    if pg < 0:
+        pg = 0
+    if pg > max_page:
+        pg = max_page
+    start = pg * PAGE_SIZE
+    end = min(start + PAGE_SIZE, total)
+
     rows = []
-    for idx, name in enumerate(names[:25]):
+    for idx in range(start, end):
+        name = names[idx]
         rows.append([InlineKeyboardButton(name, callback_data=f"rcloneDestPathCd|{idx}")])
+
+    # Page navigation
+    nav = []
+    if pg > 0:
+        nav.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"rcloneDestPathPage|{pg-1}"))
+    if end < total:
+        nav.append(InlineKeyboardButton("➡️ Next", callback_data=f"rcloneDestPathPage|{pg+1}"))
+    if nav:
+        rows.append(nav)
+
     rows.append([InlineKeyboardButton("Select here", callback_data="rcloneDestPathSelectHere")])
     # Up button if not root
     if path:
@@ -295,6 +324,20 @@ async def rclone_dest_path_browse_start_cb(client, cb:CallbackQuery):
         # Initialize browse at root by default
         await _render_browse(client, cb, '')
 
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathPage\|"))
+async def rclone_dest_path_page_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        try:
+            pg = int(cb.data.split('|', 1)[1])
+        except Exception:
+            return
+        state = await conversation_state.get(cb.from_user.id) or {}
+        data = state.get('data', {})
+        data['browse_page'] = pg
+        await conversation_state.update(cb.from_user.id, stage='rclone_browse', **data)
+        await _render_browse(client, cb, data.get('browse_path', ''))
+
+# Update cd/up/root to reset page index
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathCd\|"))
 async def rclone_dest_path_cd_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
@@ -310,6 +353,8 @@ async def rclone_dest_path_cd_cb(client, cb:CallbackQuery):
         name = entries[idx]
         base = data.get('browse_path', '')
         new_path = f"{base}/{name}" if base else name
+        data['browse_page'] = 0
+        await conversation_state.update(cb.from_user.id, stage='rclone_browse', **data)
         await _render_browse(client, cb, new_path)
 
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathUp$"))
@@ -319,10 +364,23 @@ async def rclone_dest_path_up_cb(client, cb:CallbackQuery):
         data = state.get('data', {})
         base = data.get('browse_path', '')
         if not base:
+            data['browse_page'] = 0
+            await conversation_state.update(cb.from_user.id, stage='rclone_browse', **data)
             return await _render_browse(client, cb, '')
         parts = [p for p in base.split('/') if p]
         new_path = '/'.join(parts[:-1])
+        data['browse_page'] = 0
+        await conversation_state.update(cb.from_user.id, stage='rclone_browse', **data)
         await _render_browse(client, cb, new_path)
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathRoot$"))
+async def rclone_dest_path_root_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        state = await conversation_state.get(cb.from_user.id) or {}
+        data = state.get('data', {})
+        data['browse_page'] = 0
+        await conversation_state.update(cb.from_user.id, stage='rclone_browse', **data)
+        await _render_browse(client, cb, '')
 
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathSelectHere$"))
 async def rclone_dest_path_select_here_cb(client, cb:CallbackQuery):
@@ -338,11 +396,6 @@ async def rclone_dest_path_select_here_cb(client, cb:CallbackQuery):
         set_db.set_variable('RCLONE_DEST_PATH', path)
         set_db.set_variable('RCLONE_DEST', final)
         await rclone_panel_cb(client, cb)
-
-@Client.on_callback_query(filters.regex(pattern=r"^rcloneDestPathRoot$"))
-async def rclone_dest_path_root_cb(client, cb:CallbackQuery):
-    if await check_user(cb.from_user.id, restricted=True):
-        await _render_browse(client, cb, '')
 
 
 @Client.on_callback_query(filters.regex(pattern=r"^upload"))
@@ -692,7 +745,7 @@ async def _rclone_cc_render_browse(client, cb_or_msg, which: str, include_files:
 
     # Clamp page
     max_page = 0 if total == 0 else (total - 1) // PAGE_SIZE
-    if page < 0 or page > max_page:
+    if page < 0:
         page = 0
         await conversation_state.update(cb_or_msg.from_user.id, **{page_key: page})
 
