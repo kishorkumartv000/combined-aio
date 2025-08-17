@@ -768,10 +768,11 @@ async def _rclone_cc_render_browse(client, cb_or_msg, which: str, include_files:
 
     for etype, name, idx in combined[start:end]:
         if which == 'src' and src_multi:
-            mark = ' ✅' if (f"{etype}:{name}" in selected) else ''
+            is_sel = (f"{etype}:{name}" in selected)
+            prefix = '✅ ' if is_sel else ''
             rows.append([
                 InlineKeyboardButton(
-                    f"{'📁' if etype=='dir' else '📄'} {name}{mark}",
+                    f"{prefix}{'📁' if etype=='dir' else '📄'} {name}",
                     callback_data=f"rcloneCcToggleEntry|{which}|{etype}|{idx}"
                 )
             ])
