@@ -3,6 +3,7 @@ from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup
 
 import bot.helpers.translations as lang
+import asyncio
 
 from ..settings import bot_set
 from ..helpers.buttons.settings import *
@@ -586,3 +587,283 @@ async def send_log(client:Client, msg:Message):
             './bot/bot_logs.log',
             'doc'
         )
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneCloudCopyStart$"))
+async def rclone_cloud_copy_start_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        import os
+        if not os.path.exists('rclone.conf'):
+            return await edit_message(cb.message, "rclone.conf not found.", markup=rclone_buttons())
+        # List remotes to start picking source
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                'rclone listremotes --config ./rclone.conf | cat',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            out, err = await proc.communicate()
+            if proc.returncode != 0:
+                return await edit_message(cb.message, f"Failed to list remotes:\n<code>{err.decode().strip()}</code>", markup=rclone_buttons())
+            remotes = [r.strip(':') for r in out.decode().splitlines() if r.strip()]
+            if not remotes:
+                return await edit_message(cb.message, "No remotes configured.", markup=rclone_buttons())
+            from ..helpers.state import conversation_state
+            await conversation_state.start(cb.from_user.id, 'rclone_cc_source_remote', {'remotes': remotes, 'src_remote': None, 'src_path': '', 'dst_remote': None, 'dst_path': ''})
+            rows = [[InlineKeyboardButton(r, callback_data=f"rcloneCcPickSrcRemote|{idx}")] for idx, r in enumerate(remotes[:25])]
+            rows.append([InlineKeyboardButton("Cancel", callback_data="rclonePanel")])
+            await edit_message(cb.message, "Select SOURCE remote:", InlineKeyboardMarkup(rows))
+        except Exception as e:
+            await edit_message(cb.message, f"Error: {e}", markup=rclone_buttons())
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneCcPickSrcRemote\|"))
+async def rclone_cc_pick_src_remote(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        state = await conversation_state.get(cb.from_user.id) or {}
+        data = state.get('data', {})
+        remotes = data.get('remotes') or []
+        try:
+            idx = int(cb.data.split('|', 1)[1])
+        except Exception:
+            idx = -1
+        if idx < 0 or idx >= len(remotes):
+            return await rclone_cloud_copy_start_cb(client, cb)
+        src_remote = remotes[idx]
+        await conversation_state.update(cb.from_user.id, stage='rclone_cc_browse_src', src_remote=src_remote, src_path='')
+        await _rclone_cc_render_browse(client, cb, which='src', include_files=True)
+
+async def _rclone_cc_list(remote: str, path: str, include_files: bool):
+    import asyncio
+    # Directories
+    cfg = _get_rclone_config_arg()
+    base = f"{remote}:{path.strip('/')}/" if path else f"{remote}:"
+    cmd_dirs = f'rclone lsf --dirs-only {cfg} "{base}"'
+    proc = await asyncio.create_subprocess_shell(
+        cmd_dirs,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    out_d, err_d = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(err_d.decode().strip() or 'lsf dirs failed')
+    dirs = [line.strip().rstrip('/') for line in out_d.decode().splitlines() if line.strip()]
+    files = []
+    if include_files:
+        cmd_files = f'rclone lsf --files-only {cfg} "{base}"'
+        p2 = await asyncio.create_subprocess_shell(
+            cmd_files,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        out_f, err_f = await p2.communicate()
+        if p2.returncode != 0:
+            # If file listing fails, keep dirs at least
+            files = []
+        else:
+            files = [line.strip() for line in out_f.decode().splitlines() if line.strip()]
+    return dirs, files
+
+async def _rclone_cc_render_browse(client, cb_or_msg, which: str, include_files: bool):
+    from ..helpers.state import conversation_state
+    state = await conversation_state.get(cb_or_msg.from_user.id) or {}
+    data = state.get('data', {})
+    base_path = data.get(f'{which}_path', '')
+    remote = data.get(f'{which}_remote')
+    try:
+        dirs, files = await _rclone_cc_list(remote, base_path, include_files)
+    except Exception as e:
+        return await edit_message(cb_or_msg.message if isinstance(cb_or_msg, CallbackQuery) else cb_or_msg, f"Failed to list: {e}", rclone_buttons())
+    # Save entries
+    await conversation_state.update(cb_or_msg.from_user.id, **{f'{which}_entries': {'dirs': dirs, 'files': files}})
+    rows = []
+    # Show dirs
+    for i, name in enumerate(dirs[:20]):
+        rows.append([InlineKeyboardButton(f"📁 {name}", callback_data=f"rcloneCcCd|{which}|{i}")])
+    # Show files if enabled
+    if include_files:
+        for i, name in enumerate(files[:20]):
+            rows.append([InlineKeyboardButton(f"📄 {name}", callback_data=f"rcloneCcPickFile|{which}|{i}")])
+    # Actions
+    if base_path:
+        rows.append([InlineKeyboardButton("⬆️ Up", callback_data=f"rcloneCcUp|{which}")])
+    rows.append([InlineKeyboardButton("Select this folder", callback_data=f"rcloneCcSelectFolder|{which}")])
+    rows.append([InlineKeyboardButton("Cancel", callback_data="rclonePanel")])
+    title = f"Browsing {which.upper()} {remote}: /{base_path}" if base_path else f"Browsing {which.upper()} {remote}: /"
+    await edit_message(cb_or_msg.message if isinstance(cb_or_msg, CallbackQuery) else cb_or_msg, title, InlineKeyboardMarkup(rows))
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneCcCd\|"))
+async def rclone_cc_cd_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        _, which, idx_str = cb.data.split('|', 2)
+        idx = int(idx_str) if idx_str.isdigit() else -1
+        state = await conversation_state.get(cb.from_user.id) or {}
+        entries = (state.get('data', {}).get(f'{which}_entries') or {}).get('dirs') or []
+        if idx < 0 or idx >= len(entries):
+            return await _rclone_cc_render_browse(client, cb, which=which, include_files=(which=='src'))
+        base = state.get('data', {}).get(f'{which}_path', '')
+        new_path = f"{base}/{entries[idx]}" if base else entries[idx]
+        await conversation_state.update(cb.from_user.id, **{f'{which}_path': new_path})
+        await _rclone_cc_render_browse(client, cb, which=which, include_files=(which=='src'))
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneCcUp\|"))
+async def rclone_cc_up_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        _, which = cb.data.split('|', 1)
+        state = await conversation_state.get(cb.from_user.id) or {}
+        base = state.get('data', {}).get(f'{which}_path', '')
+        parts = [p for p in base.split('/') if p]
+        new_path = '/'.join(parts[:-1])
+        await conversation_state.update(cb.from_user.id, **{f'{which}_path': new_path})
+        await _rclone_cc_render_browse(client, cb, which=which, include_files=(which=='src'))
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneCcPickFile\|"))
+async def rclone_cc_pick_file_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        _, which, idx_str = cb.data.split('|', 2)
+        if which != 'src':
+            return
+        idx = int(idx_str) if idx_str.isdigit() else -1
+        state = await conversation_state.get(cb.from_user.id) or {}
+        files = (state.get('data', {}).get('src_entries') or {}).get('files') or []
+        if idx < 0 or idx >= len(files):
+            return await _rclone_cc_render_browse(client, cb, which='src', include_files=True)
+        base = state.get('data', {}).get('src_path', '')
+        # Select exact file under base
+        selected = f"{base}/{files[idx]}" if base else files[idx]
+        await conversation_state.update(cb.from_user.id, src_file=selected)
+        # Move on to destination selection
+        await _rclone_cc_pick_destination_remote(client, cb)
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneCcSelectFolder\|"))
+async def rclone_cc_select_folder_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        _, which = cb.data.split('|', 1)
+        state = await conversation_state.get(cb.from_user.id) or {}
+        base = state.get('data', {}).get(f'{which}_path', '')
+        if which == 'src':
+            await conversation_state.update(cb.from_user.id, src_file=None)
+            # Proceed to destination remote select
+            await _rclone_cc_pick_destination_remote(client, cb)
+        else:
+            # Finalize destination and confirm
+            await conversation_state.update(cb.from_user.id, dst_path=base)
+            await _rclone_cc_confirm_and_copy(client, cb)
+
+async def _rclone_cc_pick_destination_remote(client, cb:CallbackQuery):
+    # List remotes again for destination
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            'rclone listremotes --config ./rclone.conf | cat',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        out, err = await proc.communicate()
+        if proc.returncode != 0:
+            return await edit_message(cb.message, f"Failed to list remotes:\n<code>{err.decode().strip()}</code>", markup=rclone_buttons())
+        remotes = [r.strip(':') for r in out.decode().splitlines() if r.strip()]
+        if not remotes:
+            return await edit_message(cb.message, "No remotes configured.", markup=rclone_buttons())
+        from ..helpers.state import conversation_state
+        await conversation_state.set_stage(cb.from_user.id, 'rclone_cc_dest_remote')
+        rows = [[InlineKeyboardButton(r, callback_data=f"rcloneCcPickDstRemote|{idx}")] for idx, r in enumerate(remotes[:25])]
+        rows.append([InlineKeyboardButton("Cancel", callback_data="rclonePanel")])
+        await edit_message(cb.message, "Select DESTINATION remote:", InlineKeyboardMarkup(rows))
+    except Exception as e:
+        await edit_message(cb.message, f"Error: {e}", markup=rclone_buttons())
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneCcPickDstRemote\|"))
+async def rclone_cc_pick_dst_remote(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        state = await conversation_state.get(cb.from_user.id) or {}
+        try:
+            idx = int(cb.data.split('|', 1)[1])
+        except Exception:
+            idx = -1
+        # Re-list remotes to map index
+        proc = await asyncio.create_subprocess_shell(
+            'rclone listremotes --config ./rclone.conf | cat',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        out, _ = await proc.communicate()
+        remotes = [r.strip(':') for r in out.decode().splitlines() if r.strip()]
+        if idx < 0 or idx >= len(remotes):
+            return await _rclone_cc_pick_destination_remote(client, cb)
+        dst_remote = remotes[idx]
+        await conversation_state.update(cb.from_user.id, stage='rclone_cc_browse_dst', dst_remote=dst_remote, dst_path='')
+        await _rclone_cc_render_browse(client, cb, which='dst', include_files=False)
+
+async def _rclone_cc_confirm_and_copy(client, cb:CallbackQuery):
+    from ..helpers.state import conversation_state
+    state = await conversation_state.get(cb.from_user.id) or {}
+    data = state.get('data', {})
+    src_remote = data.get('src_remote')
+    dst_remote = data.get('dst_remote')
+    src_path = data.get('src_file') or data.get('src_path')
+    dst_path = data.get('dst_path', '')
+    if not src_remote or not dst_remote or not src_path:
+        return await edit_message(cb.message, "Missing source/destination selection.", rclone_buttons())
+    src_full = f"{src_remote}:{src_path}"
+    dst_full = f"{dst_remote}:{dst_path}" if dst_path else f"{dst_remote}:"
+    rows = [
+        [InlineKeyboardButton("✅ Confirm Copy", callback_data="rcloneCcDoCopy")],
+        [InlineKeyboardButton("❌ Cancel", callback_data="rclonePanel")]
+    ]
+    text = (
+        "Cloud to Cloud Copy\n\n"
+        f"Source: <code>{src_full}</code>\n"
+        f"Destination: <code>{dst_full}</code>\n\n"
+        "Proceed?"
+    )
+    await edit_message(cb.message, text, InlineKeyboardMarkup(rows))
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneCcDoCopy$"))
+async def rclone_cc_do_copy(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        state = await conversation_state.get(cb.from_user.id) or {}
+        data = state.get('data', {})
+        src_remote = data.get('src_remote')
+        dst_remote = data.get('dst_remote')
+        src_path = data.get('src_file') or data.get('src_path')
+        dst_path = data.get('dst_path', '')
+        cfg = _get_rclone_config_arg()
+        src_full = f"{src_remote}:{src_path}"
+        dst_full = f"{dst_remote}:{dst_path}" if dst_path else f"{dst_remote}:"
+        # Start copy
+        try:
+            await edit_message(cb.message, f"Starting copy...\n<code>{src_full}</code> → <code>{dst_full}</code>")
+            proc = await asyncio.create_subprocess_shell(
+                f'rclone copy {cfg} "{src_full}" "{dst_full}"',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            out, err = await proc.communicate()
+            if proc.returncode == 0:
+                await edit_message(cb.message, "✅ Copy completed successfully.", rclone_buttons())
+            else:
+                await edit_message(cb.message, f"❌ Copy failed:\n<code>{(err.decode().strip() or out.decode().strip())}</code>", rclone_buttons())
+        except Exception as e:
+            await edit_message(cb.message, f"❌ Error: {e}", rclone_buttons())
+
+# Reuse existing helper to get rclone config arg
+def _get_rclone_config_arg() -> str:
+    import os
+    from config import Config
+    try:
+        if getattr(Config, "RCLONE_CONFIG", None) and os.path.exists(Config.RCLONE_CONFIG):
+            return f'--config "{Config.RCLONE_CONFIG}"'
+    except Exception:
+        pass
+    for p in ("/workspace/rclone.conf", "rclone.conf"):
+        try:
+            if os.path.exists(p):
+                return f'--config "{p}"'
+        except Exception:
+            continue
+    return ""
