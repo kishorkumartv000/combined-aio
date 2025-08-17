@@ -142,6 +142,12 @@ def core_buttons():
                 text=f"Video Upload: {'Document' if bot_set.video_as_document else 'Media'}",
                 callback_data='vidUploadType'
             )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"Extract Embedded Cover: {'True' if bot_set.extract_embedded_cover else 'False'}",
+                callback_data='toggleExtractCover'
+            )
         ]
     ]
     inline_keyboard += main_button + close_button
