@@ -217,6 +217,13 @@ def rclone_buttons():
             callback_data='rcloneCloudCopyStart'
         )
     ])
+    # Cloud to cloud move action
+    inline_keyboard.append([
+        InlineKeyboardButton(
+            text="Cloud to Cloud Move",
+            callback_data='rcloneCloudMoveStart'
+        )
+    ])
 
     # Destination controls (separate remote and path)
     dest_label = getattr(bot_set, 'rclone_dest', None) or (Config.RCLONE_DEST or '(unset)')
