@@ -1255,11 +1255,12 @@ async def rclone_manage_confirm_cb(client, cb:CallbackQuery):
         data = state.get('data', {})
         src_remote = data.get('src_remote')
         dst_remote = data.get('dst_remote')
-        src_path = data.get('src_file') or data.get('src_path')
+        base = (data.get('base') or '').strip('/')
+        src_rel = (data.get('src_file') or data.get('src_path') or '').strip('/')
         dst_path = data.get('dst_path', '')
         if not src_remote or not dst_remote:
             return await edit_message(cb.message, "Missing source/destination.", rclone_buttons())
-        src_full = f"{src_remote}:{src_path}"
+        src_full = f"{src_remote}:{base+'/'+src_rel if base else src_rel}"
         dst_full = f"{dst_remote}:{dst_path}" if dst_path else f"{dst_remote}:"
         mode = (data.get('cc_mode') or 'copy').lower()
         verb = 'Move' if mode == 'move' else 'Copy'
@@ -1277,12 +1278,13 @@ async def rclone_manage_do_cb(client, cb:CallbackQuery):
         data = state.get('data', {})
         src_remote = data.get('src_remote')
         dst_remote = data.get('dst_remote')
-        src_path = data.get('src_file') or data.get('src_path')
+        base = (data.get('base') or '').strip('/')
+        src_rel = (data.get('src_file') or data.get('src_path') or '').strip('/')
         dst_path = data.get('dst_path', '')
         cfg = _get_rclone_config_arg()
-        if not src_remote or not dst_remote or not src_path:
+        if not src_remote or not dst_remote or not src_rel:
             return await edit_message(cb.message, "Missing source/destination selection.", rclone_buttons())
-        src_full = f"{src_remote}:{src_path}"
+        src_full = f"{src_remote}:{base+'/'+src_rel if base else src_rel}"
         dst_full = f"{dst_remote}:{dst_path}" if dst_path else f"{dst_remote}:"
         mode = (data.get('cc_mode') or 'copy').lower()
         cmd = 'move' if mode == 'move' else 'copy'
