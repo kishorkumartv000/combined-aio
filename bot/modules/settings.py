@@ -768,10 +768,11 @@ async def _rclone_cc_render_browse(client, cb_or_msg, which: str, include_files:
 
     for etype, name, idx in combined[start:end]:
         if which == 'src' and src_multi:
-            mark = ' ✅' if (f"{etype}:{name}" in selected) else ''
+            is_sel = (f"{etype}:{name}" in selected)
+            prefix = '✅ ' if is_sel else ''
             rows.append([
                 InlineKeyboardButton(
-                    f"{'📁' if etype=='dir' else '📄'} {name}{mark}",
+                    f"{prefix}{'📁' if etype=='dir' else '📄'} {name}",
                     callback_data=f"rcloneCcToggleEntry|{which}|{etype}|{idx}"
                 )
             ])
@@ -1215,3 +1216,27 @@ async def rclone_cloud_move_start_cb(client, cb:CallbackQuery):
             await edit_message(cb.message, "Select SOURCE remote:", InlineKeyboardMarkup(rows))
         except Exception as e:
             await edit_message(cb.message, f"Error: {e}", markup=rclone_buttons())
+
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneManageStart$"))
+async def rclone_manage_start_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        state = await conversation_state.get(cb.from_user.id) or {}
+        data = state.get('data', {})
+        # Expect keys from uploader: src_remote, base, src_path, src_file
+        src_remote = data.get('src_remote')
+        base = (data.get('base') or '').strip('/')
+        src_path = (data.get('src_path') or '').strip('/')
+        # Merge base into src_path for CC flow
+        effective = f"{base}/{src_path}".strip('/') if base else src_path
+        await conversation_state.update(
+            cb.from_user.id,
+            stage='rclone_cc_browse_src',
+            src_remote=src_remote,
+            src_path=effective,
+            # keep src_file as-is if present (it should already be relative)
+            cc_src_multi=False,
+            cc_src_selected=[],
+            src_page=0
+        )
+        await _rclone_cc_render_browse(client, cb, which='src', include_files=True)
