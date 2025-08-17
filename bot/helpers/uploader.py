@@ -10,6 +10,8 @@ from mutagen.mp4 import MP4
 import re
 from bot.settings import bot_set
 from bot.helpers.progress import ProgressReporter
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from ..helpers.state import conversation_state
 
 async def track_upload(metadata, user, index: int = None, total: int = None):
     """
@@ -55,7 +57,7 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
             cancel_event=user.get('cancel_event')
         )
     elif bot_set.upload_mode == 'RCLONE':
-        rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
+        rclone_link, index_link, remote_info = await rclone_upload(user, metadata['filepath'], base_path)
         text = await format_string(
             "🎵 **{title}**\n👤 {artist}\n🎧 {provider}\n🔗 [Direct Link]({r_link})",
             {
@@ -68,6 +70,7 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
         if index_link:
             text += f"\n📁 [Index Link]({index_link})"
         await send_message(user, text)
+        await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
     os.remove(metadata['filepath'])
@@ -113,7 +116,7 @@ async def music_video_upload(metadata, user):
             cancel_event=user.get('cancel_event')
         )
     elif bot_set.upload_mode == 'RCLONE':
-        rclone_link, index_link = await rclone_upload(user, metadata['filepath'], base_path)
+        rclone_link, index_link, remote_info = await rclone_upload(user, metadata['filepath'], base_path)
         text = await format_string(
             "🎬 **{title}**\n👤 {artist}\n🎧 {provider} Music Video\n🔗 [Direct Link]({r_link})",
             {
@@ -126,6 +129,7 @@ async def music_video_upload(metadata, user):
         if index_link:
             text += f"\n📁 [Index Link]({index_link})"
         await send_message(user, text)
+        await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
     os.remove(metadata['filepath'])
@@ -211,7 +215,7 @@ async def album_upload(metadata, user):
             for idx, track in enumerate(tracks, start=1):
                 await track_upload(track, user, index=idx, total=total_tracks)
     elif bot_set.upload_mode == 'RCLONE':
-        rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
+        rclone_link, index_link, remote_info = await rclone_upload(user, metadata['folderpath'], base_path)
         text = await format_string(
             "💿 **{album}**\n👤 {artist}\n🎧 {provider}\n🔗 [Direct Link]({r_link})",
             {
@@ -228,6 +232,7 @@ async def album_upload(metadata, user):
             await edit_message(metadata['poster_msg'], text)
         else:
             await send_message(user, text)
+        await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
     shutil.rmtree(metadata['folderpath'])
@@ -300,7 +305,7 @@ async def artist_upload(metadata, user):
                 for idx, track in enumerate(tracks, start=1):
                     await track_upload(track, user, index=idx, total=total_tracks)
     elif bot_set.upload_mode == 'RCLONE':
-        rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
+        rclone_link, index_link, remote_info = await rclone_upload(user, metadata['folderpath'], base_path)
         text = await format_string(
             "🎤 **{artist}**\n🎧 {provider} Discography\n🔗 [Direct Link]({r_link})",
             {
@@ -312,6 +317,7 @@ async def artist_upload(metadata, user):
         if index_link:
             text += f"\n📁 [Index Link]({index_link})"
         await send_message(user, text)
+        await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
     shutil.rmtree(metadata['folderpath'])
@@ -382,7 +388,7 @@ async def playlist_upload(metadata, user):
             for idx, track in enumerate(tracks, start=1):
                 await track_upload(track, user, index=idx, total=total_tracks)
     elif bot_set.upload_mode == 'RCLONE':
-        rclone_link, index_link = await rclone_upload(user, metadata['folderpath'], base_path)
+        rclone_link, index_link, remote_info = await rclone_upload(user, metadata['folderpath'], base_path)
         text = await format_string(
             "🎵 **{title}**\n👤 Curated by {artist}\n🎧 {provider} Playlist\n🔗 [Direct Link]({r_link})",
             {
@@ -395,6 +401,7 @@ async def playlist_upload(metadata, user):
         if index_link:
             text += f"\n📁 [Index Link]({index_link})"
         await send_message(user, text)
+        await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
     shutil.rmtree(metadata['folderpath'])
@@ -410,7 +417,7 @@ async def rclone_upload(user, path, base_path):
     # Ensure destination is configured
     dest_root = (getattr(bot_set, 'rclone_dest', None) or Config.RCLONE_DEST)
     if not dest_root:
-        return None, None
+        return None, None, None
 
     # Normalize source path
     abs_path = os.path.abspath(path)
@@ -454,6 +461,7 @@ async def rclone_upload(user, path, base_path):
             source_for_copy = parent_dir_abs
             relative_path = _compute_relative(parent_dir_abs, base_path)
             dest_path = f"{dest_root}/{relative_path}".rstrip("/")
+            is_directory = True
     else:
         # FILE scope: keep existing behavior
         relative_path = _compute_relative(abs_path, base_path)
@@ -479,7 +487,7 @@ async def rclone_upload(user, path, base_path):
         except Exception:
             pass
         # Even if copy fails, return None links so caller can handle gracefully
-        return None, None
+        return None, None, None
 
     # 2) Build links
     rclone_link = None
@@ -512,4 +520,45 @@ async def rclone_upload(user, path, base_path):
         # Do not URL-encode here to keep behavior in line with current uploader; indexers usually handle spaces
         index_link = f"{Config.INDEX_LINK}/{relative_path}".replace(" ", "%20")
 
-    return rclone_link, index_link
+    # Remote info for post-upload manage flow
+    remote_name = getattr(bot_set, 'rclone_remote', '') or (Config.RCLONE_DEST.split(':',1)[0] if Config.RCLONE_DEST and ':' in Config.RCLONE_DEST else '')
+    remote_info = {
+        'remote': remote_name,
+        'path': relative_path,
+        'is_dir': is_directory
+    }
+
+    return rclone_link, index_link, remote_info
+
+async def _post_rclone_manage_button(user, remote_info: dict):
+    try:
+        # Seed conversation state for manage flow
+        src_remote = remote_info.get('remote')
+        rel_path = remote_info.get('path') or ''
+        is_dir = bool(remote_info.get('is_dir'))
+        # If file, keep full path in src_file and base folder in src_path
+        if is_dir:
+            src_path = rel_path
+            src_file = None
+        else:
+            src_path = os.path.dirname(rel_path)
+            src_file = rel_path
+        await conversation_state.start(user['user_id'], 'rclone_manage', {
+            'src_remote': src_remote,
+            'src_path': src_path,
+            'src_file': src_file,
+            'dst_remote': None,
+            'dst_path': '',
+            'cc_mode': 'copy',
+            'src_page': 0
+        })
+        # Button to open manage UI
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📂 Browse uploaded (Copy/Move)", callback_data="rcloneManageStart")]
+        ])
+        await send_message(user, "Manage the uploaded item:", markup=kb)
+    except Exception as e:
+        try:
+            await send_message(user, f"Note: manage button unavailable ({e})")
+        except Exception:
+            pass
