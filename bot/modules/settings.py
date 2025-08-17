@@ -891,16 +891,18 @@ async def _rclone_cc_confirm_and_copy(client, cb:CallbackQuery):
     dst_remote = data.get('dst_remote')
     src_path = data.get('src_file') or data.get('src_path')
     dst_path = data.get('dst_path', '')
+    mode = (data.get('cc_mode') or 'copy').lower()
     if not src_remote or not dst_remote or not src_path:
         return await edit_message(cb.message, "Missing source/destination selection.", rclone_buttons())
     src_full = f"{src_remote}:{src_path}"
     dst_full = f"{dst_remote}:{dst_path}" if dst_path else f"{dst_remote}:"
+    verb = 'Move' if mode == 'move' else 'Copy'
     rows = [
-        [InlineKeyboardButton("✅ Confirm Copy", callback_data="rcloneCcDoCopy")],
+        [InlineKeyboardButton(f"✅ Confirm {verb}", callback_data="rcloneCcDoCopy")],
         [InlineKeyboardButton("❌ Cancel", callback_data="rclonePanel")]
     ]
     text = (
-        "Cloud to Cloud Copy\n\n"
+        f"Cloud to Cloud {verb}\n\n"
         f"Source: <code>{src_full}</code>\n"
         f"Destination: <code>{dst_full}</code>\n\n"
         "Proceed?"
@@ -920,19 +922,21 @@ async def rclone_cc_do_copy(client, cb:CallbackQuery):
         cfg = _get_rclone_config_arg()
         src_full = f"{src_remote}:{src_path}"
         dst_full = f"{dst_remote}:{dst_path}" if dst_path else f"{dst_remote}:"
-        # Start copy
+        mode = (data.get('cc_mode') or 'copy').lower()
+        cmd = 'move' if mode == 'move' else 'copy'
+        # Start op
         try:
-            await edit_message(cb.message, f"Starting copy...\n<code>{src_full}</code> → <code>{dst_full}</code>")
+            await edit_message(cb.message, f"Starting {cmd}...\n<code>{src_full}</code> → <code>{dst_full}</code>")
             proc = await asyncio.create_subprocess_shell(
-                f'rclone copy {cfg} "{src_full}" "{dst_full}"',
+                f'rclone {cmd} {cfg} "{src_full}" "{dst_full}"',
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
             out, err = await proc.communicate()
             if proc.returncode == 0:
-                await edit_message(cb.message, "✅ Copy completed successfully.", rclone_buttons())
+                await edit_message(cb.message, f"✅ {cmd.capitalize()} completed successfully.", rclone_buttons())
             else:
-                await edit_message(cb.message, f"❌ Copy failed:\n<code>{(err.decode().strip() or out.decode().strip())}</code>", rclone_buttons())
+                await edit_message(cb.message, f"❌ {cmd.capitalize()} failed:\n<code>{(err.decode().strip() or out.decode().strip())}</code>", rclone_buttons())
         except Exception as e:
             await edit_message(cb.message, f"❌ Error: {e}", rclone_buttons())
 
