@@ -41,13 +41,45 @@ async def download_track(c, msg: Message):
         if not spam:
             user = await fetch_user_details(msg, reply)
             user['link'] = link
-            # Create task state
             from bot.helpers.tasks import task_manager
+            from bot.settings import bot_set
+            # If queue mode is ON, enqueue the job to run one-by-one
+            if getattr(bot_set, 'queue_mode', False):
+                # Build a small function that will create its own task state when executed
+                async def _job():
+                    state = await task_manager.create(user, label="Download")
+                    u = dict(user)
+                    u['task_id'] = state.task_id
+                    u['cancel_event'] = state.cancel_event
+                    u['bot_msg'] = await send_message(msg, f"Starting download…\nUse /cancel <code>{state.task_id}</code> to stop.")
+                    await send_message(u, f"Task ID:\n<code>{state.task_id}</code>")
+                    try:
+                        await start_link(link, u, options)
+                        await send_message(u, lang.s.TASK_COMPLETED)
+                    except asyncio.CancelledError:
+                        await send_message(u, "⏹️ Task cancelled")
+                    except Exception as e:
+                        LOGGER.error(f"Download failed: {e}")
+                        error_msg = f"Download failed: {str(e)}"
+                        await send_message(u, error_msg)
+                    try:
+                        await c.delete_messages(msg.chat.id, u['bot_msg'].id)
+                    except Exception:
+                        pass
+                    await cleanup(u)
+                    await task_manager.finish(state.task_id, status="cancelled" if state.cancel_event.is_set() else "done")
+                    await antiSpam(msg.from_user.id, msg.chat.id, True)
+
+                await task_manager.enqueue(_job)
+                qsize = await task_manager.queue_size()
+                await send_message(user, f"✅ Added to queue. Position: {qsize}")
+                return
+
+            # Otherwise, run immediately as before
             state = await task_manager.create(user, label="Download")
             user['task_id'] = state.task_id
             user['cancel_event'] = state.cancel_event
             user['bot_msg'] = await send_message(msg, f"Starting download…\nUse /cancel <code>{state.task_id}</code> to stop.")
-            # Send ID in a separate, easily copyable message
             await send_message(user, f"Task ID:\n<code>{state.task_id}</code>")
             try:
                 await start_link(link, user, options)
@@ -56,7 +88,6 @@ async def download_track(c, msg: Message):
                 await send_message(user, "⏹️ Task cancelled")
             except Exception as e:
                 LOGGER.error(f"Download failed: {e}")
-                # USE SAFE ERROR MESSAGING
                 error_msg = f"Download failed: {str(e)}"
                 await send_message(user, error_msg)
             await c.delete_messages(msg.chat.id, user['bot_msg'].id)

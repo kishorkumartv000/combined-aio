@@ -1222,16 +1222,23 @@ async def rclone_cloud_move_start_cb(client, cb:CallbackQuery):
         except Exception as e:
             await edit_message(cb.message, f"Error: {e}", markup=rclone_buttons())
 
-@Client.on_callback_query(filters.regex(pattern=r"^rcloneManageStart$"))
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneManageStart\|"))
 async def rclone_manage_start_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         from ..helpers.state import conversation_state
+        # Extract token-specific context
+        try:
+            token = cb.data.split('|', 1)[1]
+        except Exception:
+            token = None
         state = await conversation_state.get(cb.from_user.id) or {}
         data = state.get('data', {})
+        manage_map = data.get('rclone_manage_map') or {}
+        ctx = manage_map.get(token) or {}
         # Expect keys from uploader: src_remote, base, src_path, src_file
-        src_remote = data.get('src_remote')
-        base = (data.get('base') or '').strip('/')
-        src_path = (data.get('src_path') or '').strip('/')
+        src_remote = ctx.get('src_remote')
+        base = (ctx.get('base') or '').strip('/')
+        src_path = (ctx.get('src_path') or '').strip('/')
         # Merge base into src_path for CC flow
         effective = f"{base}/{src_path}".strip('/') if base else src_path
         await conversation_state.update(
@@ -1258,3 +1265,19 @@ async def rclone_cc_mode_cb(client, cb:CallbackQuery):
             return
         await conversation_state.set_data(cb.from_user.id, 'cc_mode', mode)
         await _rclone_cc_render_browse(client, cb, which='src', include_files=True)
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^toggleQueueMode$"))
+async def toggle_queue_mode_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        try:
+            from ..settings import bot_set
+            from ..helpers.database.pg_impl import set_db
+            bot_set.queue_mode = not bool(getattr(bot_set, 'queue_mode', False))
+            set_db.set_variable('QUEUE_MODE', bot_set.queue_mode)
+        except Exception:
+            pass
+        try:
+            await core_cb(client, cb)
+        except:
+            pass

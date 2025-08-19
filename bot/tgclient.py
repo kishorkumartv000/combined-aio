@@ -30,6 +30,13 @@ class Bot(Client):
             LOGGER.error("Apple Music downloader not found! Running installer...")
             subprocess.run([Config.INSTALLER_PATH], check=True)
         
+        # Start queue worker
+        try:
+            from .helpers.tasks import task_manager
+            await task_manager.start_worker()
+        except Exception:
+            pass
+
         LOGGER.info("BOT : Started Successfully with Apple Music support")
 
     async def stop(self, *args):

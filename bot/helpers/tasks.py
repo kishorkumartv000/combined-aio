@@ -22,6 +22,9 @@ class TaskManager:
     def __init__(self):
         self._tasks: Dict[str, TaskState] = {}
         self._lock = asyncio.Lock()
+        # Simple per-bot FIFO queue. Jobs are coroutine callables with args
+        self._queue = asyncio.Queue()
+        self._worker_started = False
 
     async def create(self, user: dict, label: str) -> TaskState:
         async with self._lock:
@@ -103,6 +106,36 @@ class TaskManager:
         if user_id is None:
             return dict(self._tasks)
         return {tid: st for tid, st in self._tasks.items() if st.user_id == user_id}
+
+    # --- Queue support ---
+    async def start_worker(self):
+        if self._worker_started:
+            return
+        self._worker_started = True
+
+        async def _worker_loop():
+            from bot.settings import bot_set
+            while True:
+                job = await self._queue.get()
+                try:
+                    # Only run one job at a time; job is a coroutine function
+                    await job()
+                except Exception as e:
+                    try:
+                        LOGGER.error(f"Queue job failed: {e}")
+                    except Exception:
+                        pass
+                finally:
+                    self._queue.task_done()
+
+        asyncio.get_event_loop().create_task(_worker_loop())
+
+    async def enqueue(self, job_coro_factory):
+        """Enqueue a job. job_coro_factory must be a callable returning a coroutine when called without args."""
+        await self._queue.put(job_coro_factory)
+
+    async def queue_size(self) -> int:
+        return self._queue.qsize()
 
 
 # Singleton
