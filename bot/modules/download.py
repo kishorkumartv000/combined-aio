@@ -70,9 +70,8 @@ async def download_track(c, msg: Message):
                     await task_manager.finish(state.task_id, status="cancelled" if state.cancel_event.is_set() else "done")
                     await antiSpam(msg.from_user.id, msg.chat.id, True)
 
-                await task_manager.enqueue(_job)
-                qsize = await task_manager.queue_size()
-                await send_message(user, f"✅ Added to queue. Position: {qsize}")
+                qid, pos = await task_manager.enqueue(user['user_id'], link, options, _job)
+                await send_message(user, f"✅ Added to queue. ID: <code>{qid}</code>\nPosition: {pos}")
                 return
 
             # Otherwise, run immediately as before
