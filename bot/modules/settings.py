@@ -1281,3 +1281,41 @@ async def toggle_queue_mode_cb(client, cb:CallbackQuery):
             await core_cb(client, cb)
         except:
             pass
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^queuePanel$"))
+async def queue_panel_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.tasks import task_manager
+        items = await task_manager.list_pending(user_id=cb.from_user.id)
+        rows = []
+        if not items:
+            rows.append([InlineKeyboardButton("(empty)", callback_data='noop')])
+        else:
+            for it in items[:10]:
+                link = it.get('link') or ''
+                if len(link) > 43:
+                    label = f"{it.get('position')}. {link[:40]}…"
+                else:
+                    label = f"{it.get('position')}. {link}"
+                rows.append([InlineKeyboardButton(label, callback_data='noop')])
+                rows.append([InlineKeyboardButton(f"❌ Cancel {it.get('qid')}", callback_data=f"queueCancel|{it.get('qid')}")])
+        rows.append([InlineKeyboardButton("🔄 Refresh", callback_data='queuePanel')])
+        rows.append([InlineKeyboardButton("🔙 Back", callback_data='corePanel')])
+        await edit_message(cb.message, "Queue Controls", InlineKeyboardMarkup(rows))
+
+@Client.on_callback_query(filters.regex(pattern=r"^queueCancel\|"))
+async def queue_cancel_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.tasks import task_manager
+        try:
+            qid = cb.data.split('|',1)[1]
+        except Exception:
+            qid = ''
+        if not qid:
+            return await queue_panel_cb(client, cb)
+        ok = await task_manager.cancel_pending(qid, user_id=cb.from_user.id)
+        if ok:
+            await queue_panel_cb(client, cb)
+        else:
+            await edit_message(cb.message, f"❌ Not found or already running: {qid}")
