@@ -546,7 +546,9 @@ async def rclone_upload(user, path, base_path):
 
 async def _post_rclone_manage_button(user, remote_info: dict):
     try:
-        # Seed conversation state for manage flow
+        # Seed conversation state for manage flow. Use a unique token so older buttons continue to work.
+        import uuid
+        token = uuid.uuid4().hex[:10]
         src_remote = remote_info.get('remote')
         rel_path = remote_info.get('path') or ''
         is_dir = bool(remote_info.get('is_dir'))
@@ -557,7 +559,11 @@ async def _post_rclone_manage_button(user, remote_info: dict):
         else:
             src_path = os.path.dirname(rel_path)
             src_file = rel_path
-        await conversation_state.start(user['user_id'], 'rclone_manage', {
+        # Store multiple manage contexts keyed by token
+        state = await conversation_state.get(user['user_id']) or {"stage": None, "data": {}}
+        ctx = state.get('data', {})
+        manage_map = dict(ctx.get('rclone_manage_map') or {})
+        manage_map[token] = {
             'src_remote': src_remote,
             'base': remote_info.get('base') if isinstance(remote_info, dict) else None,
             'src_path': src_path,
@@ -566,10 +572,11 @@ async def _post_rclone_manage_button(user, remote_info: dict):
             'dst_path': '',
             'cc_mode': 'copy',
             'src_page': 0
-        })
+        }
+        await conversation_state.update(user['user_id'], rclone_manage_map=manage_map)
         # Button to open manage UI
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📂 Browse uploaded (Copy/Move)", callback_data="rcloneManageStart")]
+            [InlineKeyboardButton("📂 Browse uploaded (Copy/Move)", callback_data=f"rcloneManageStart|{token}")]
         ])
         await send_message(user, "Manage the uploaded item:", markup=kb)
     except Exception as e:

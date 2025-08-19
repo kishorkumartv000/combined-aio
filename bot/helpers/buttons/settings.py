@@ -7,6 +7,7 @@ import os
 main_button = [[InlineKeyboardButton(text=lang.s.MAIN_MENU_BUTTON, callback_data="main_menu")]]
 close_button = [[InlineKeyboardButton(text=lang.s.CLOSE_BUTTON, callback_data="close")]]
 
+
 def main_menu():
     inline_keyboard = [
         [
@@ -39,18 +40,20 @@ def main_menu():
     inline_keyboard += close_button
     return InlineKeyboardMarkup(inline_keyboard)
 
+
 def providers_button():
     inline_keyboard = []
-    
+
     # Always show Apple Music button
     inline_keyboard.append([
         InlineKeyboardButton("🍎 Apple Music", callback_data="appleP")
     ])
-    
+
     # Apple-only build: hide other providers
-    
+
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
+
 
 def tg_button():
     inline_keyboard = [
@@ -77,6 +80,7 @@ def tg_button():
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
 
+
 def core_buttons():
     inline_keyboard = []
 
@@ -97,6 +101,24 @@ def core_buttons():
                 callback_data='upload'
             )
         ],
+        [
+            InlineKeyboardButton(
+                text=f"Queue Mode: {'ON' if bot_set.queue_mode else 'OFF'}",
+                callback_data='toggleQueueMode'
+            )
+        ],
+    ]
+
+    # Optional queue panel button
+    if bot_set.queue_mode:
+        inline_keyboard.append([
+            InlineKeyboardButton(
+                text="Open Queue Panel",
+                callback_data='queuePanel'
+            )
+        ])
+
+    inline_keyboard += [
         [
             InlineKeyboardButton(
                 text=lang.s.SORT_PLAYLIST.format(bot_set.playlist_sort),
@@ -152,6 +174,7 @@ def core_buttons():
     ]
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
+
 
 # New: Rclone settings buttons
 
@@ -241,6 +264,7 @@ def rclone_buttons():
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
 
+
 def language_buttons(languages, selected):
     inline_keyboard = []
     for item in languages:
@@ -257,6 +281,7 @@ def language_buttons(languages, selected):
     return InlineKeyboardMarkup(inline_keyboard)
 
 # Apple Music specific buttons
+
 def apple_button(formats):
     """Create buttons for Apple Music settings"""
     buttons = []

@@ -66,6 +66,8 @@ class BotSettings:
         self.disable_sort_link = _to_bool(__getvalue__('PLAYLIST_LINK_DISABLE'))
         self.artist_batch = _to_bool(__getvalue__('ARTIST_BATCH_UPLOAD'))
         self.playlist_conc = _to_bool(__getvalue__('PLAYLIST_CONCURRENT'))
+        # Queue mode toggle
+        self.queue_mode = _to_bool(__getvalue__('QUEUE_MODE'))
         
         link_option, _ = set_db.get_variable('RCLONE_LINK_OPTIONS')
         self.link_options = link_option if self.rclone and link_option else 'False'
