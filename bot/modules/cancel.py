@@ -1,3 +1,46 @@
+from pyrogram import Client, filters
+from pyrogram.types import Message
+
+from bot import CMD
+from bot.helpers.tasks import task_manager
+from bot.helpers.message import send_message, check_user, fetch_user_details
+from bot.settings import bot_set
+
+
+cancel_cmds = ["cancel"]
+if bot_set.bot_username:
+	cancel_cmds.append(f"cancel@{bot_set.bot_username}")
+
+@Client.on_message(filters.command(cancel_cmds))
+async def cancel_task(c, msg: Message):
+	if not await check_user(msg=msg):
+		return
+	parts = msg.text.strip().split()
+	if len(parts) < 2:
+		return await send_message(msg, "Usage: /cancel <task_id>")
+	task_id = parts[1]
+	ok = await task_manager.cancel(task_id)
+	if ok:
+		await send_message(msg, f"⏹️ Cancellation requested for ID: {task_id}")
+	else:
+		await send_message(msg, f"❓ Task ID not found: {task_id}")
+
+
+cancel_all_cmds = ["cancel_all"]
+if bot_set.bot_username:
+	cancel_all_cmds.append(f"cancel_all@{bot_set.bot_username}")
+
+@Client.on_message(filters.command(cancel_all_cmds))
+async def cancel_all_tasks(c, msg: Message):
+	if not await check_user(msg=msg):
+		return
+	user = await fetch_user_details(msg)
+	count = await task_manager.cancel_all(user_id=user['user_id'])
+	if count:
+		await send_message(msg, f"⏹️ Cancellation requested for {count} task(s)")
+	else:
+		await send_message(msg, "✅ No running tasks to cancel")
+
 
 # Queue helpers
 queue_list_cmds = ["qqueue", "queue"]
