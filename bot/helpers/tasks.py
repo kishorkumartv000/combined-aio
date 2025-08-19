@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Callable, Any, Tuple
 
 from bot.logger import LOGGER
 
@@ -22,8 +22,9 @@ class TaskManager:
     def __init__(self):
         self._tasks: Dict[str, TaskState] = {}
         self._lock = asyncio.Lock()
-        # Simple per-bot FIFO queue. Jobs are coroutine callables with args
-        self._queue = asyncio.Queue()
+        # Simple per-bot FIFO queue with metadata and cancel support
+        self._pending: List[Dict[str, Any]] = []  # each: {qid, user_id, link, options, job}
+        self._pending_event = asyncio.Event()
         self._worker_started = False
 
     async def create(self, user: dict, label: str) -> TaskState:
@@ -114,28 +115,67 @@ class TaskManager:
         self._worker_started = True
 
         async def _worker_loop():
-            from bot.settings import bot_set
             while True:
-                job = await self._queue.get()
+                await self._pending_event.wait()
+                item = None
+                async with self._lock:
+                    if self._pending:
+                        item = self._pending.pop(0)
+                    if not self._pending:
+                        self._pending_event.clear()
+                if not item:
+                    continue
+                job = item.get('job')
                 try:
-                    # Only run one job at a time; job is a coroutine function
                     await job()
                 except Exception as e:
                     try:
                         LOGGER.error(f"Queue job failed: {e}")
                     except Exception:
                         pass
-                finally:
-                    self._queue.task_done()
 
         asyncio.get_event_loop().create_task(_worker_loop())
 
-    async def enqueue(self, job_coro_factory):
-        """Enqueue a job. job_coro_factory must be a callable returning a coroutine when called without args."""
-        await self._queue.put(job_coro_factory)
+    async def enqueue(self, user_id: int, link: str, options: Dict[str, Any], job_coro_factory: Callable[[], Any]) -> Tuple[str, int]:
+        """Enqueue a job with metadata, return (queue_id, position)."""
+        async with self._lock:
+            qid = uuid.uuid4().hex[:8]
+            self._pending.append({
+                'qid': qid,
+                'user_id': user_id,
+                'link': link,
+                'options': options or {},
+                'job': job_coro_factory,
+            })
+            self._pending_event.set()
+            position = len(self._pending)
+            return qid, position
 
-    async def queue_size(self) -> int:
-        return self._queue.qsize()
+    async def queue_size(self, user_id: Optional[int] = None) -> int:
+        async with self._lock:
+            if user_id is None:
+                return len(self._pending)
+            return sum(1 for it in self._pending if it.get('user_id') == user_id)
+
+    async def list_pending(self, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        async with self._lock:
+            items = list(self._pending)
+        if user_id is not None:
+            items = [it for it in items if it.get('user_id') == user_id]
+        # annotate position
+        for idx, it in enumerate(items, start=1):
+            it['position'] = idx
+        return items
+
+    async def cancel_pending(self, qid: str, user_id: Optional[int] = None) -> bool:
+        async with self._lock:
+            for i, it in enumerate(self._pending):
+                if it.get('qid') == qid and (user_id is None or it.get('user_id') == user_id):
+                    del self._pending[i]
+                    if not self._pending:
+                        self._pending_event.clear()
+                    return True
+        return False
 
 
 # Singleton
