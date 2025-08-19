@@ -175,6 +175,12 @@ This build is Apple Music–only. Qobuz, Tidal, and Deezer integrations have bee
 /download --atmos
       ```
   - On start, the bot replies with a Task ID. Use it to manage the task.
+- Queue Mode (sequential downloads/uploads):
+  - Turn on: Settings → Core → Queue Mode: ON
+  - While ON, /download does not start immediately; it enqueues and replies with a Queue ID and position.
+  - See your queue: use /qqueue (alias /queue) or Settings → Core → Open Queue Panel
+  - Cancel a queued link: /qcancel <queue_id> or use the ❌ button in Queue Panel
+  - Cancel the currently running job: /cancel <task_id>
 - /cancel <task_id>: Cancel a specific running task by its ID
   - Example:
     ```
@@ -261,6 +267,9 @@ start - Start the bot
 help - Show help
 settings - Open settings panel
 download - Start a download
+queue - Show your queue
+qqueue - Show your queue (alias)
+qcancel - Cancel a queued item by Queue ID
 cancel - Cancel a running task by ID
 cancel_all - Cancel all your running tasks
 config - Config help for Apple Music YAML

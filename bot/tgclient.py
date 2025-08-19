@@ -30,10 +30,12 @@ class Bot(Client):
             LOGGER.error("Apple Music downloader not found! Running installer...")
             subprocess.run([Config.INSTALLER_PATH], check=True)
         
-        # Start queue worker
+        # Queue worker: start only if Queue Mode is enabled
         try:
             from .helpers.tasks import task_manager
-            await task_manager.start_worker()
+            from .settings import bot_set
+            if getattr(bot_set, 'queue_mode', False):
+                await task_manager.start_worker()
         except Exception:
             pass
 

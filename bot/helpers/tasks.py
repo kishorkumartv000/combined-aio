@@ -149,6 +149,8 @@ class TaskManager:
             })
             self._pending_event.set()
             position = len(self._pending)
+            # Ensure worker is running on first enqueue
+            await self.start_worker()
             return qid, position
 
     async def queue_size(self, user_id: Optional[int] = None) -> int:
