@@ -162,25 +162,28 @@ async def album_upload(metadata, user):
     
     if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
-        if bot_set.album_zip:
-            # Decide zipping strategy based on folder size and Telegram limits
+        zip_paths = []
+
+        # Check if folderpath is already a list of zip files (from legacy handlers)
+        if isinstance(metadata.get('folderpath'), list):
+            zip_paths = metadata['folderpath']
+        elif bot_set.album_zip:
+            # Current zipping logic for Apple Music
             total_size = _get_folder_size(metadata['folderpath'])
-            zip_paths = []
             if total_size > MAX_SIZE:
-                # Split into multiple zips for Telegram
                 z = await zip_handler(metadata['folderpath'])
                 zip_paths = z if isinstance(z, list) else [z]
             else:
-                # Single descriptive zip with progress
                 zip_path = await create_apple_zip(
-                    metadata['folderpath'], 
+                    metadata['folderpath'],
                     user['user_id'],
                     metadata,
                     progress=reporter,
                     cancel_event=user.get('cancel_event')
                 )
                 zip_paths = [zip_path]
-            
+
+        if zip_paths:
             # Create caption with provider info
             caption = await format_string(
                 "💿 **{album}**\n👤 {artist}\n🎧 {provider}",
@@ -190,7 +193,6 @@ async def album_upload(metadata, user):
                     'provider': metadata.get('provider', 'Apple Music')
                 }
             )
-            
             total_parts = len(zip_paths)
             for idx, zp in enumerate(zip_paths, start=1):
                 await send_message(
