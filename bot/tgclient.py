@@ -23,7 +23,9 @@ class Bot(Client):
 
     async def start(self):
         await super().start()
-
+        await bot_set.login_qobuz()
+        await bot_set.login_deezer()
+        await bot_set.login_tidal()
         
         # Initialize Apple Music downloader
         if not os.path.exists(Config.DOWNLOADER_PATH):

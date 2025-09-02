@@ -10,7 +10,9 @@ from config import Config
 from bot.logger import LOGGER
 
 from .helpers.database.pg_impl import set_db, download_history
-
+from .helpers.qobuz.qopy import qobuz_api
+from .helpers.deezer.dzapi import deezerapi
+from .helpers.tidal.tidal_api import tidalapi
 from .helpers.translations import lang_available
 
 
@@ -42,6 +44,10 @@ def __decrypt_string__(string):
 class BotSettings:
     def __init__(self):
         # Apple-only build: remove other providers
+        self.deezer = False
+        self.qobuz = False
+        # Add this line to initialize can_enable_tidal
+        self.can_enable_tidal = Config.ENABLE_TIDAL and Config.ENABLE_TIDAL.lower() == "true"
         self.admins = Config.ADMINS
         self.apple = None  # Apple Music settings placeholder
         self.bot_username = (Config.BOT_USERNAME or "").lstrip("@")
@@ -167,6 +173,84 @@ class BotSettings:
                 LOGGER.info("Apple Music downloader installed successfully")
             except Exception as e:
                 LOGGER.error(f"Apple Music downloader installation failed: {str(e)}")
+
+    # Apple-only build: remove other providers' login flows
+    async def login_qobuz(self):
+        """Initialize Qobuz client"""
+        if Config.QOBUZ_EMAIL or Config.QOBUZ_USER:
+            try:
+                await qobuz_api.login()
+                self.qobuz = qobuz_api
+                self.clients.append(qobuz_api)
+                quality, _ = set_db.get_variable("QOBUZ_QUALITY")
+                if quality:
+                    qobuz_api.quality = int(quality)
+            except Exception as e:
+                LOGGER.error(f"Qobuz login failed: {str(e)}")
+
+    async def login_deezer(self):
+        """Initialize Deezer client"""
+        if Config.DEEZER_ARL or Config.DEEZER_EMAIL:
+            if Config.DEEZER_BF_SECRET:
+                login = await deezerapi.login()
+                if login:
+                    self.deezer = deezerapi
+                    self.clients.append(deezerapi)
+                    LOGGER.info(f"DEEZER : Subscription - {deezerapi.user['OFFER_NAME']}")
+                else:
+                    try:
+                        await deezerapi.session.close()
+                    except:
+                        pass
+            else:
+                LOGGER.error('DEEZER : Check BF_SECRET and TRACK_URL_KEY')
+
+    async def login_tidal(self):
+        """Initialize Tidal client"""
+        if not self.can_enable_tidal:
+            return
+
+        data = None
+        if Config.TIDAL_REFRESH_TOKEN:
+            data = {
+                'user_id': None,
+                'refresh_token': Config.TIDAL_REFRESH_TOKEN,
+                'country_code': Config.TIDAL_COUNTRY_CODE
+            }
+        else:
+            _, saved_info = set_db.get_variable("TIDAL_AUTH_DATA")
+            if saved_info:
+                try:
+                    data = json.loads(__decrypt_string__(saved_info))
+                except Exception as e:
+                    LOGGER.error(f"TIDAL: Failed to parse saved auth data: {e}")
+                    return
+
+        if not data:
+            return
+
+        sub = await tidalapi.login_from_saved(data)
+        if sub:
+            LOGGER.info(f"TIDAL: Successfully loaded account - {sub}")
+
+        if quality := __getvalue__('TIDAL_QUALITY'):
+            tidalapi.quality = quality
+
+        if spatial := __getvalue__('TIDAL_SPATIAL'):
+            tidalapi.spatial = spatial
+
+        self.tidal = tidalapi
+        self.clients.append(tidalapi)
+
+    async def save_tidal_login(self, session):
+        """Save Tidal login session"""
+        data = {
+            "user_id": session.user_id,
+            "refresh_token": session.refresh_token,
+            "country_code": session.country_code
+        }
+        txt = json.dumps(data)
+        set_db.set_variable("TIDAL_AUTH_DATA", 0, True, __encrypt_string__(txt))
 
     def set_language(self):
         """Set bot language"""
