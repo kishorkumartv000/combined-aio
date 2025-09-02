@@ -4,7 +4,7 @@ from config import Config
 
 from pathvalidate import sanitize_filepath
 
-from ..utils import *
+from ..legacy_utils import *
 from ..metadata import set_metadata
 
 # FIXED IMPORT: Changed from ..uploder to ..uploader
