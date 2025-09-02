@@ -254,8 +254,8 @@ async def move_sorted_playlist(metadata, user) -> str:
         str: path to the newly created playlist folder
     """
 
-    source_folder = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{metadata['provider']}"
-    destination_folder = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{metadata['provider']}/{metadata['title']}"
+    source_folder = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{metadata['provider']}"
+    destination_folder = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{metadata['provider']}/{metadata['title']}"
 
     os.makedirs(destination_folder, exist_ok=True)
 
@@ -391,10 +391,10 @@ async def cleanup(user=None, metadata=None, ):
             pass
     if user:
         try:
-            shutil.rmtree(f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/")
+            shutil.rmtree(f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/")
         except Exception as e:
             LOGGER.info(e)
         try:
-            shutil.rmtree(f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}-temp/")
+            shutil.rmtree(f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}-temp/")
         except Exception as e:
             LOGGER.info(e)

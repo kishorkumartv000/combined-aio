@@ -43,7 +43,7 @@ async def start_track(track_id:int, user:dict, track_meta:dict | None, \
             return await send_message(user, e)
 
         track_meta = await get_track_metadata(track_id, track_data, user['r_id'])
-        filepath = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{track_meta['provider']}/{track_meta['albumartist']}/{track_meta['album']}"
+        filepath = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{track_meta['provider']}/{track_meta['albumartist']}/{track_meta['album']}"
         # mostly session and quality will not be present
         session, quality = await get_stream_session(track_data)
     else:
@@ -130,7 +130,7 @@ async def start_album(album_id:int, user:dict, upload=True, basefolder=None):
     if basefolder:
         album_folder = basefolder + f"/{album_meta['title']}"
     else:
-        album_folder = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{album_meta['provider']}/{album_meta['artist']}/{album_meta['title']}"
+        album_folder = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{album_meta['provider']}/{album_meta['artist']}/{album_meta['title']}"
 
     album_folder = sanitize_filepath(album_folder)
     album_meta['folderpath'] = album_folder
@@ -173,7 +173,7 @@ async def start_album(album_id:int, user:dict, upload=True, basefolder=None):
 async def start_artist(artist_id:int, user:dict):
     artist_data = await tidalapi.get_artist(artist_id)
     artist_meta = await get_artist_metadata(artist_data, user['r_id'])
-    artist_meta['folderpath'] = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{artist_meta['provider']}/{artist_meta['artist']}"
+    artist_meta['folderpath'] = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{artist_meta['provider']}/{artist_meta['artist']}"
     artist_meta['folderpath'] = sanitize_filepath(artist_meta['folderpath'])
 
     try:
