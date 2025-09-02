@@ -9,7 +9,7 @@ from .metadata import *
 
 from ..legacy_utils import *
 from ..metadata import set_metadata, get_audio_extension
-from ..uploader import *
+from ..legacy_uploader import *
 from ..message import send_message
 
 from ...settings import bot_set
