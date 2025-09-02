@@ -165,14 +165,26 @@ async def get_audio_extension(path):
 async def create_cover_file(url:dict, meta:dict, thumbnail=False):
     filename = f"{meta['itemid']}-thumb.jpg" if thumbnail else f"{meta['itemid']}.jpg"
 
-    # Ensure the temporary directory exists
     temp_dir = meta['tempfolder']
-    os.makedirs(temp_dir, exist_ok=True)
+    LOGGER.info(f"CREATE_COVER_FILE: Attempting to use temp_dir: {temp_dir}")
+    LOGGER.info(f"CREATE_COVER_FILE: Absolute path of temp_dir: {os.path.abspath(temp_dir)}")
+
+    try:
+        os.makedirs(temp_dir, exist_ok=True)
+        LOGGER.info(f"CREATE_COVER_FILE: Successfully ran os.makedirs for {temp_dir}")
+    except Exception as e:
+        LOGGER.error(f"CREATE_COVER_FILE: os.makedirs failed with error: {e}")
+
+    if os.path.isdir(temp_dir):
+        LOGGER.info(f"CREATE_COVER_FILE: Verified that {temp_dir} is a directory.")
+    else:
+        LOGGER.error(f"CREATE_COVER_FILE: Verification failed. {temp_dir} is NOT a directory after makedirs call.")
 
     cover = os.path.join(temp_dir, filename)
     
     if not os.path.exists(cover):
         err = await download_file(url, cover, 1, 5)
         if err:
+            LOGGER.error(f"CREATE_COVER_FILE: download_file failed with error: {err}")
             return './project-siesta.png'
     return cover
