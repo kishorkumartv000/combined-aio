@@ -24,42 +24,56 @@ from .message import send_message, edit_message
 MAX_SIZE = 1.9 * 1024 * 1024 * 1024  # 2GB
 # download folder structure : BASE_DOWNLOAD_DIR + message_r_id
 
-async def download_file(url, path, retries=3, timeout=30):
+async def download_file(url, path, retries=3, timeout=30, cancel_event: asyncio.Event | None = None):
     """
+    Download a file with retry logic, timeout, and cooperative cancellation
     Args:
-        url (str): URL to download.
-        path (str): Path including filename with extension.
-        retries (int): Number of retries in case of failure.
-        timeout (int): Timeout duration for the request in seconds.
+        url (str): URL to download
+        path (str): Full path to save the file
+        retries (int): Number of retry attempts
+        timeout (int): Timeout in seconds
+        cancel_event: Optional asyncio.Event to signal cancellation
     Returns:
-        str or None: Error message if any, else None.
+        str or None: Error message if failed, else None
     """
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
     for attempt in range(1, retries + 1):
         try:
+            if cancel_event and cancel_event.is_set():
+                # Clean partial file if any
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except Exception:
+                    pass
+                return "Cancelled"
             async with aiohttp.ClientSession(timeout=ClientTimeout(total=timeout)) as session:
                 async with session.get(url) as response:
                     if response.status == 200:
                         with open(path, 'wb') as f:
-                            while True:
-                                chunk = await response.content.read(1024 * 4)
-                                if not chunk:
-                                    break
+                            async for chunk in response.content.iter_chunked(1024 * 4):
+                                if cancel_event and cancel_event.is_set():
+                                    try:
+                                        f.close()
+                                    except Exception:
+                                        pass
+                                    try:
+                                        if os.path.exists(path):
+                                            os.remove(path)
+                                    except Exception:
+                                        pass
+                                    return "Cancelled"
                                 f.write(chunk)
                         return None
                     else:
                         return f"HTTP Status: {response.status}"
-        except aiohttp.ClientError as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             if attempt == retries:
-                return f"Connection failed after {retries} attempts: {str(e)}"
-            await asyncio.sleep(2 ** attempt)  # Exponential backoff
-        except asyncio.TimeoutError:
-            if attempt == retries:
-                return "Download failed due to timeout."
+                return f"Failed after {retries} attempts: {str(e)}"
             await asyncio.sleep(2 ** attempt)
         except Exception as e:
-            return e
+            return f"Unexpected error: {str(e)}"
 
 
 
