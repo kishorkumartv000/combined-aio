@@ -212,9 +212,7 @@ async def check_type(url):
 
 async def get_url_info(url):
     r = re.search(
-        r"(?:https:\/\/(?:w{3}|open|play)\.qobuz\.com)?(?:\/[a-z]{2}-[a-z]{2})"
-        r"?\/(album|artist|track|playlist|label|interpreter)(?:\/[-\w\d]+)?\/([
-\w\d]+)",
+        r"(?:https://(?:w{3}|open|play)\.qobuz\.com)?(?:\/[a-z]{2}-[a-z]{2})?\/(album|artist|track|playlist|label|interpreter)(?:\/[-\w\d]+)?\/([\w\d]+)",
         url,
     )
     return r.groups()
