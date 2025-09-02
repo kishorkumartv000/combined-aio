@@ -7,7 +7,7 @@ from .tidal_api import tidalapi
 from .utils import *
 from .metadata import *
 
-from ..utils import *
+from ..legacy_utils import *
 from ..metadata import set_metadata, get_audio_extension
 from ..uploader import *
 from ..message import send_message
