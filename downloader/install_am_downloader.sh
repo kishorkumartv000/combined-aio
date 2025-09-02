@@ -159,6 +159,7 @@ fi
 echo "Step 8/10: Building application..."
 cd "$HOME/amalac"
 /usr/local/go/bin/go clean -modcache
+/usr/local/go/bin/go get -u github.com/olekukonko/tablewriter
 /usr/local/go/bin/go get -u ./...
 /usr/local/go/bin/go mod tidy
 echo "Application built successfully!"
