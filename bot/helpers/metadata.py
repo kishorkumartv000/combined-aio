@@ -164,7 +164,12 @@ async def get_audio_extension(path):
 
 async def create_cover_file(url:dict, meta:dict, thumbnail=False):
     filename = f"{meta['itemid']}-thumb.jpg" if thumbnail else f"{meta['itemid']}.jpg"
-    cover = meta['tempfolder'] + filename
+
+    # Ensure the temporary directory exists
+    temp_dir = meta['tempfolder']
+    os.makedirs(temp_dir, exist_ok=True)
+
+    cover = os.path.join(temp_dir, filename)
     
     if not os.path.exists(cover):
         err = await download_file(url, cover, 1, 5)
