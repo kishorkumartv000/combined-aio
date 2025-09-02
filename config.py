@@ -33,6 +33,11 @@ class Config:
     # Base directory for downloads
     DOWNLOAD_BASE_DIR = LOCAL_STORAGE
     
+    # Legacy Provider Directory (for Tidal, Qobuz, Deezer)
+    LEGACY_WORK_DIR = getenv("LEGACY_WORK_DIR", "./bot/")
+    LEGACY_DOWNLOADS_FOLDER = getenv("LEGACY_DOWNLOADS_FOLDER", "DOWNLOADS")
+    LEGACY_DOWNLOAD_BASE_DIR = LEGACY_WORK_DIR + LEGACY_DOWNLOADS_FOLDER
+
     # File/Folder Naming
     PLAYLIST_NAME_FORMAT = getenv("PLAYLIST_NAME_FORMAT", "{title} - Playlist")  
                                                                             # e.g. "{title} - Playlist"

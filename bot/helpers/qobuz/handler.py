@@ -46,7 +46,7 @@ async def start_album(item_id:int, user:dict, upload=True, basefolder=None):
     if basefolder:
         album_folder = basefolder + f"/{album_meta['title']}"
     else:
-        album_folder = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{album_meta['provider']}/{album_meta['artist']}/{album_meta['title']}"
+        album_folder = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{album_meta['provider']}/{album_meta['artist']}/{album_meta['title']}"
     album_folder = sanitize_filepath(album_folder)
     album_meta['folderpath'] = album_folder
 
@@ -92,11 +92,11 @@ async def start_track(item_id:int, user:dict, track_meta:dict | None, upload=Tru
         track_meta, err = await get_track_metadata(item_id, user['r_id'])
         if err:
             return await send_message(user, err)
-        filepath = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{track_meta['provider']}/{track_meta['albumartist']}/{track_meta['album']}"
+        filepath = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{track_meta['provider']}/{track_meta['albumartist']}/{track_meta['album']}"
     else:
         # set base file path if doesnt exist in metadata
         if track_meta['filepath'] == '' and basefolder is None:
-            filepath = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{track_meta['provider']}/{track_meta['albumartist']}/{track_meta['album']}"
+            filepath = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{track_meta['provider']}/{track_meta['albumartist']}/{track_meta['album']}"
         else:
             filepath = basefolder
 
@@ -130,7 +130,7 @@ async def start_track(item_id:int, user:dict, track_meta:dict | None, upload=Tru
 
 async def start_artist(albums, user, artist):
     artist_meta = await get_artist_meta(artist[0])
-    artist_meta['folderpath'] = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/Qobuz/{artist[0]['name']}"
+    artist_meta['folderpath'] = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/Qobuz/{artist[0]['name']}"
     artist_meta['folderpath'] = sanitize_filepath(artist_meta['folderpath'])
 
     upload_album = True
@@ -164,7 +164,7 @@ async def start_playlist(tracks, playlist, user):
     playlist_sort = False if bot_set.upload_mode == 'Telegram' else bot_set.playlist_sort
 
     if not playlist_sort:
-        playlist_folder = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/Qobuz/{play_meta['title']}"
+        playlist_folder = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/Qobuz/{play_meta['title']}"
         playlist_folder = sanitize_filepath(playlist_folder)
     play_meta['folderpath'] = playlist_folder
 

@@ -42,7 +42,7 @@ async def start_track(item_id: int, user: dict, track_meta: dict | None, upload=
         except Exception as e:
             return await send_message(user, e)
 
-        filepath = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{track_meta['provider']}/{track_meta['albumartist']}/{track_meta['album']}"
+        filepath = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{track_meta['provider']}/{track_meta['albumartist']}/{track_meta['album']}"
 
     url = await deezerapi.get_track_url(
         item_id,
@@ -77,7 +77,7 @@ async def start_album(album_id:int, user:dict, upload=True):
 
     album_meta = await process_album_metadata(album_id, raw_data['DATA'], raw_data['SONGS'], user['r_id'])
 
-    album_folder = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{album_meta['provider']}/{album_meta['artist']}/{album_meta['title']}"
+    album_folder = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{album_meta['provider']}/{album_meta['artist']}/{album_meta['title']}"
 
     album_folder = sanitize_filepath(album_folder)
     album_meta['folderpath'] = album_folder
@@ -128,7 +128,7 @@ async def start_playlist(playlist_id, user):
 
     play_meta = await process_playlist_meta(raw_data, user['r_id'])
 
-    playlist_folder = f"{Config.DOWNLOAD_BASE_DIR}/{user['r_id']}/{play_meta['provider']}/"
+    playlist_folder = f"{Config.LEGACY_DOWNLOAD_BASE_DIR}/{user['r_id']}/{play_meta['provider']}/"
 
     # temp variable (telegram upload doesnt need sorting)
     playlist_sort = False if bot_set.upload_mode == 'Telegram' else bot_set.playlist_sort

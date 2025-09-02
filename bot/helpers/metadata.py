@@ -36,7 +36,7 @@ metadata = {
         'provider': '',
         'tracks': [],
         'albums': [],
-        'tempfolder': f'{Config.DOWNLOAD_BASE_DIR}/', # specific folder for each user
+        'tempfolder': f'{Config.LEGACY_DOWNLOAD_BASE_DIR}/', # specific folder for each user
         'filepath': '',   # if track, full path to file
         'folderpath': '', # if album/playlist the full path to folder
         'poster_msg': None,  # Pyrogram message of post (if exist)
