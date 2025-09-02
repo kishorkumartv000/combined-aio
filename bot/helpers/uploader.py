@@ -173,14 +173,14 @@ async def album_upload(metadata, user):
             else:
                 # Single descriptive zip with progress
                 zip_path = await create_apple_zip(
-                    metadata['folderpath'], 
+                    metadata['folderpath'],
                     user['user_id'],
                     metadata,
                     progress=reporter,
                     cancel_event=user.get('cancel_event')
                 )
                 zip_paths = [zip_path]
-            
+
             # Create caption with provider info
             caption = await format_string(
                 "💿 **{album}**\n👤 {artist}\n🎧 {provider}",
@@ -190,7 +190,7 @@ async def album_upload(metadata, user):
                     'provider': metadata.get('provider', 'Apple Music')
                 }
             )
-            
+
             total_parts = len(zip_paths)
             for idx, zp in enumerate(zip_paths, start=1):
                 await send_message(
