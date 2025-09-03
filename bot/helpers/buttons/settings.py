@@ -62,9 +62,6 @@ def providers_button():
         inline_keyboard.append([
             InlineKeyboardButton(lang.s.TIDAL, callback_data="tdP")
         ])
-        inline_keyboard.append([
-            InlineKeyboardButton("Tidal DL NG", callback_data="tidalNgP")
-        ])
 
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
