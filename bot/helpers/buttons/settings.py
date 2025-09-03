@@ -310,7 +310,14 @@ def apple_button(formats):
 
 # Tidal panel
 def tidal_buttons():
+    status = '✅ ON' if bot_set.tidal_legacy_enabled else '❌ OFF'
     inline_keyboard = [
+        [
+            InlineKeyboardButton(
+                text=f"Legacy Tidal: {status}",
+                callback_data='toggleLegacyTidal'
+            )
+        ],
         [
             InlineKeyboardButton(
                 text=lang.s.AUTHORIZATION,
