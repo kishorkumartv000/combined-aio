@@ -1,4 +1,5 @@
 import bot.helpers.translations as lang
+import asyncio
 
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup
@@ -366,14 +367,145 @@ async def tidal_remove_login_cb(c: Client, cb: CallbackQuery):
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNgP"))
 async def tidal_ng_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
+        buttons = [
+            [
+                InlineKeyboardButton("🔑 Login", callback_data="tidalNgLogin"),
+                InlineKeyboardButton("🚨 Logout", callback_data="tidalNgLogout")
+            ],
+            [
+                InlineKeyboardButton("🔙 Back", callback_data="providerPanel")
+            ]
+        ]
         await edit_message(
             cb.message,
             "**Tidal DL NG Settings**\n\n"
-            "This provider is currently under development. "
-            "Settings for this provider will be available here soon.",
-            InlineKeyboardMarkup(
-                [
-                    [InlineKeyboardButton("🔙 Back", callback_data="providerPanel")]
-                ]
+            "Use the buttons below to manage your Tidal DL NG session.",
+            InlineKeyboardMarkup(buttons)
+        )
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNgLogin"))
+async def tidal_ng_login_cb(c, cb: CallbackQuery):
+    if not await check_user(cb.from_user.id, restricted=True):
+        return
+
+    msg = await edit_message(
+        cb.message,
+        "⏳ **Attempting to log in to Tidal DL NG...**\n\n"
+        "Please wait while the bot starts the login process."
+    )
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            'python', 'cli.py', 'login',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd='/usr/src/app/tidal-dl-ng/tidal_dl_ng'
+        )
+
+        # Timeout for the entire login process
+        try:
+            # We will read stdout line by line
+            url_found = False
+            while True:
+                line = await asyncio.wait_for(process.stdout.readline(), timeout=305.0)
+                if not line:
+                    break
+
+                output = line.decode().strip()
+                if "https://link.tidal.com/" in output:
+                    url_found = True
+                    await edit_message(
+                        msg,
+                        f"🔗 **Login URL Detected**\n\n"
+                        f"Please visit the following URL to log in. The code will expire in 5 minutes.\n\n"
+                        f"`{output}`\n\n"
+                        f"The bot is waiting for you to complete the login...",
+                    )
+
+                if "The login was successful" in output:
+                    await edit_message(
+                        msg,
+                        f"✅ **Login Successful!**\n\n"
+                        f"Your Tidal DL NG credentials have been stored."
+                    )
+                    await process.wait() # ensure process is finished
+                    return
+
+            # If loop breaks and we haven't returned, something went wrong
+            stderr_output = await process.stderr.read()
+            err_msg = stderr_output.decode().strip()
+            await edit_message(
+                msg,
+                f"❌ **Login Failed**\n\n"
+                f"The login process failed. Please try again.\n\n"
+                f"**Error:**\n`{err_msg or 'No error message from script.'}`"
             )
+
+        except asyncio.TimeoutError:
+            process.kill()
+            await edit_message(
+                msg,
+                "❌ **Login Timed Out**\n\n"
+                "You did not complete the login within 5 minutes. Please try again."
+            )
+
+    except Exception as e:
+        await edit_message(
+            msg,
+            f"❌ **An Error Occurred**\n\n"
+            f"An unexpected error occurred while trying to log in.\n\n"
+            f"`{str(e)}`"
+        )
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNgLogout"))
+async def tidal_ng_logout_cb(c, cb: CallbackQuery):
+    if not await check_user(cb.from_user.id, restricted=True):
+        return
+
+    msg = await edit_message(
+        cb.message,
+        "⏳ **Attempting to log out from Tidal DL NG...**"
+    )
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            'python', 'cli.py', 'logout',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd='/usr/src/app/tidal-dl-ng/tidal_dl_ng'
+        )
+
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=60.0)
+
+        output = stdout.decode().strip()
+        err_msg = stderr.decode().strip()
+
+        if process.returncode == 0 and "successfully logged out" in output:
+            await edit_message(
+                msg,
+                "✅ **Logout Successful!**\n\n"
+                "You have been logged out from Tidal DL NG."
+            )
+        else:
+            await edit_message(
+                msg,
+                f"❌ **Logout Failed**\n\n"
+                f"The logout process failed. Please try again.\n\n"
+                f"**Error:**\n`{err_msg or output or 'No error message from script.'}`"
+            )
+
+    except asyncio.TimeoutError:
+        process.kill()
+        await edit_message(
+            msg,
+            "❌ **Logout Timed Out**\n\nPlease try again."
+        )
+    except Exception as e:
+        await edit_message(
+            msg,
+            f"❌ **An Error Occurred**\n\n"
+            f"An unexpected error occurred while trying to log out.\n\n"
+            f"`{str(e)}`"
         )
