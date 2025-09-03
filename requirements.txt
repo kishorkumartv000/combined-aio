@@ -13,3 +13,4 @@ aiolimiter
 aiofiles
 typer
 toml
+tidalapi
