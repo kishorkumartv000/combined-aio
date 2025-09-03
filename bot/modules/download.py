@@ -10,6 +10,7 @@ import bot.helpers.translations as lang
 from ..helpers.utils import cleanup
 from ..helpers.qobuz.handler import start_qobuz
 from ..helpers.tidal.handler import start_tidal
+from ..helpers.tidal_ng.handler import start_tidal_ng
 from ..helpers.deezer.handler import start_deezer
 from ..providers.apple import start_apple
 # IMPORT EDIT_MESSAGE HERE:
@@ -140,9 +141,10 @@ async def start_link(link: str, user: dict, options: dict = None):
 
     from bot.settings import bot_set
     if link.startswith(tuple(tidal)):
-        if not bot_set.tidal_legacy_enabled:
-            return await send_message(user, "Tidal (Legacy) provider is disabled in settings.")
-        await start_tidal(link, user)
+        if bot_set.tidal_legacy_enabled:
+            await start_tidal(link, user)
+        else:
+            await start_tidal_ng(link, user)
     elif link.startswith(tuple(deezer)):
         await start_deezer(link, user)
     elif link.startswith(tuple(qobuz)):

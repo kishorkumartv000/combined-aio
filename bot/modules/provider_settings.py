@@ -35,6 +35,9 @@ async def provider_cb(c, cb: CallbackQuery):
             buttons.append([
                 InlineKeyboardButton(lang.s.TIDAL, callback_data="tdP")
             ])
+            buttons.append([
+                InlineKeyboardButton("Tidal DL NG", callback_data="tidalNgP")
+            ])
 
         buttons += [
             [InlineKeyboardButton(lang.s.MAIN_MENU_BUTTON, callback_data="main_menu")],
@@ -355,3 +358,22 @@ async def tidal_remove_login_cb(c: Client, cb: CallbackQuery):
         )
 
         await tidal_auth_cb(c, cb)
+
+
+#--------------------
+# TIDAL DL NG
+#--------------------
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNgP"))
+async def tidal_ng_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        await edit_message(
+            cb.message,
+            "**Tidal DL NG Settings**\n\n"
+            "This provider is currently under development. "
+            "Settings for this provider will be available here soon.",
+            InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("🔙 Back", callback_data="providerPanel")]
+                ]
+            )
+        )
