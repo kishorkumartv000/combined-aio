@@ -396,8 +396,9 @@ async def tidal_ng_login_cb(c, cb: CallbackQuery):
     )
 
     try:
-        process = await asyncio.create_subprocess_exec(
-            'python', 'cli.py', 'login',
+        command = "env PYTHONPATH=/usr/src/app/tidal-dl-ng python cli.py login"
+        process = await asyncio.create_subprocess_shell(
+            command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd='/usr/src/app/tidal-dl-ng/tidal_dl_ng'
@@ -470,8 +471,9 @@ async def tidal_ng_logout_cb(c, cb: CallbackQuery):
     )
 
     try:
-        process = await asyncio.create_subprocess_exec(
-            'python', 'cli.py', 'logout',
+        command = "env PYTHONPATH=/usr/src/app/tidal-dl-ng python cli.py logout"
+        process = await asyncio.create_subprocess_shell(
+            command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd='/usr/src/app/tidal-dl-ng/tidal_dl_ng'
