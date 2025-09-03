@@ -14,3 +14,4 @@ aiofiles
 typer
 toml
 tidalapi
+dataclasses_json
