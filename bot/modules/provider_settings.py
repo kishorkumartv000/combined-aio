@@ -209,6 +209,24 @@ async def tidal_cb(c, cb: CallbackQuery):
         )
 
 
+@Client.on_callback_query(filters.regex(pattern=r"^toggleLegacyTidal"))
+async def toggle_legacy_tidal_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        bot_set.tidal_legacy_enabled = not bot_set.tidal_legacy_enabled
+        status = "ON" if bot_set.tidal_legacy_enabled else "OFF"
+        await c.answer_callback_query(
+            cb.id,
+            f"Legacy Tidal is now {status}",
+            show_alert=False
+        )
+        # Directly edit the message to refresh the buttons
+        await edit_message(
+            cb.message,
+            lang.s.TIDAL_PANEL,
+            tidal_buttons()
+        )
+
+
 @Client.on_callback_query(filters.regex(pattern=r"^tdQ"))
 async def tidal_quality_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):

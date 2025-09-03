@@ -138,7 +138,10 @@ async def start_link(link: str, user: dict, options: dict = None):
     spotify = ["https://open.spotify.com"]
     apple_music = ["https://music.apple.com"]
 
+    from bot.settings import bot_set
     if link.startswith(tuple(tidal)):
+        if not bot_set.tidal_legacy_enabled:
+            return await send_message(user, "Tidal (Legacy) provider is disabled in settings.")
         await start_tidal(link, user)
     elif link.startswith(tuple(deezer)):
         await start_deezer(link, user)

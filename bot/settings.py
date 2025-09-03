@@ -48,6 +48,8 @@ class BotSettings:
         self.qobuz = False
         # Add this line to initialize can_enable_tidal
         self.can_enable_tidal = Config.ENABLE_TIDAL and Config.ENABLE_TIDAL.lower() == "true"
+        # Runtime toggle for the legacy Tidal integration
+        self.tidal_legacy_enabled = self.can_enable_tidal
         self.admins = Config.ADMINS
         self.apple = None  # Apple Music settings placeholder
         self.bot_username = (Config.BOT_USERNAME or "").lstrip("@")
