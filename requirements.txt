@@ -11,3 +11,4 @@ pycryptodomex
 psutil
 aiolimiter
 aiofiles
+typer
