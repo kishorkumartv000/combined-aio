@@ -154,6 +154,49 @@ TON - `UQBBPkWSnbMWXrM6P-pb96wYxQzLjZ2hhuYfsO-N2pVmznCG`
 - You can cancel the flow any time by sending `/cancel`.
 - If 2FA prompt does not appear (rare), setup continues and completes automatically.
 
+## Tidal NG Downloader (Beta)
+
+This bot features a modern, robust backend for handling Tidal downloads, referred to as "Tidal NG" (Next Generation). It operates by interfacing with a powerful external command-line tool, `tidal-dl-ng`.
+
+### How It Works
+
+Unlike the legacy provider which used a Python library directly, the Tidal NG handler acts as a smart controller for the `tidal-dl-ng` CLI tool. When you request a Tidal download:
+1.  The bot determines the correct, isolated directory for the current download task.
+2.  It programmatically modifies the `tidal-dl-ng` tool's own `settings.json` file to set the `download_base_path` to this directory.
+3.  It executes the CLI tool (`python cli.py dl <URL>`), which then downloads the music to the location specified by the bot.
+4.  After the download is complete or fails, the bot restores the `settings.json` file to its original state to ensure system integrity.
+
+This method is robust, clean, and allows the bot to leverage the full feature set of the underlying CLI tool.
+
+### Configuration
+
+The download location for Tidal NG is managed automatically, but can be customized.
+
+-   **Default Behavior**: By default, each download is saved to a unique directory within the bot's main download folder, structured like this:
+    ```
+    <DOWNLOAD_BASE_DIR>/<user_id>/<task_id>/
+    ```
+-   **Optional Override**: For advanced users, you can specify a global download path for all Tidal NG downloads by setting the following optional environment variable in your `.env` file:
+    -   `TIDAL_NG_DOWNLOAD_PATH`: If set, all Tidal NG downloads will be saved here. For example: `TIDAL_NG_DOWNLOAD_PATH=/data/music/tidal`
+
+### Enabling Tidal NG
+
+The bot can switch between the new Tidal NG provider and the legacy one.
+-   Go to `Settings -> Providers -> Tidal`.
+-   You will see a toggle for `Legacy Mode`.
+-   **Disable** `Legacy Mode` to use the new Tidal NG provider.
+-   **Enable** `Legacy Mode` to use the old provider.
+
+### Features
+
+The `tidal-dl-ng` backend supports a wide range of features, including:
+-   Downloading tracks, albums, playlists, and mixes.
+-   Multiple audio quality levels: LOW, HIGH, LOSSLESS, and HI_RES_LOSSLESS.
+-   Support for downloading music videos.
+-   Automatic extraction of FLAC audio from MP4 containers.
+-   Embedding of metadata, cover art, and lyrics.
+-   Highly configurable file and folder naming formats via the `settings.json` file.
+
 ## Commands and Usage
 
 These commands work in any chat where the bot is present. Copy-paste directly into Telegram.
