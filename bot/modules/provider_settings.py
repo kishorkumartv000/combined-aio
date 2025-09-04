@@ -501,8 +501,10 @@ async def tidal_ng_set_cover_dim_cb(c, cb: CallbackQuery):
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNg_file$"))
 async def tidal_ng_file_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
         buttons = [
-            create_toggle_button(cb.from_user.id, 'tidal_ng_playlist_create', "Create .m3u8 Playlist", False, "tidalNg_setPlaylistCreate"),
+            create_toggle_button(user_id, 'tidal_ng_playlist_create', "Create .m3u8 Playlist", False, "tidalNg_setPlaylistCreate"),
+            create_toggle_button(user_id, 'tidal_ng_symlink', "Symlink to Track", False, "tidalNg_setSymlink"),
             [InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]
         ]
         await edit_message(cb.message, "🗂️ **File Settings**", InlineKeyboardMarkup(buttons))
@@ -511,6 +513,11 @@ async def tidal_ng_file_cb(c, cb: CallbackQuery):
 async def tidal_ng_set_playlist_create_cb(c, cb: CallbackQuery):
     await handle_toggle_setting(cb, 'tidal_ng_playlist_create', "Create .m3u8 Playlist", False, tidal_ng_file_cb)
 
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setSymlink_"))
+async def tidal_ng_set_symlink_cb(c, cb: CallbackQuery):
+    await handle_toggle_setting(cb, 'tidal_ng_symlink', "Symlink to Track", False, tidal_ng_file_cb)
+
+
 # --- Video Settings ---
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNg_video$"))
 async def tidal_ng_video_cb(c, cb: CallbackQuery):
@@ -518,10 +525,24 @@ async def tidal_ng_video_cb(c, cb: CallbackQuery):
         user_id = cb.from_user.id
         current_quality = get_tidal_ng_setting(user_id, 'tidal_ng_video_quality', "480")
         qualities = ["360", "480", "720", "1080"]
+        buttons = [
+            create_toggle_button(user_id, 'tidal_ng_video_download', "Download Videos", True, "tidalNg_setVideoDownload"),
+            create_toggle_button(user_id, 'tidal_ng_video_convert', "Convert to MP4", True, "tidalNg_setVideoConvert"),
+            [InlineKeyboardButton("Video Quality", callback_data="tidalNg_videoQualitySel"), InlineKeyboardButton(f"{current_quality}p ✅", callback_data="tidalNg_videoQualitySel")],
+            [InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]
+        ]
+        await edit_message(cb.message, "🎬 **Video Settings**", InlineKeyboardMarkup(buttons))
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_videoQualitySel$"))
+async def tidal_ng_video_quality_sel_cb(c, cb: CallbackQuery):
+     if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
+        current_quality = get_tidal_ng_setting(user_id, 'tidal_ng_video_quality', "480")
+        qualities = ["360", "480", "720", "1080"]
         buttons = []
         for q in qualities:
             buttons.append([InlineKeyboardButton(f"{q}p{' ✅' if q == current_quality else ''}", callback_data=f"tidalNg_setVideoQuality_{q}")])
-        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="tidalNg_video")])
         await edit_message(cb.message, "**Select Video Quality**", InlineKeyboardMarkup(buttons))
 
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setVideoQuality_"))
@@ -532,6 +553,14 @@ async def tidal_ng_set_video_quality_cb(c, cb: CallbackQuery):
         user_set_db.set_user_setting(user_id, 'tidal_ng_video_quality', quality_to_set)
         await cb.answer(f"Video quality set to {quality_to_set}p", show_alert=False)
         await tidal_ng_video_cb(c, cb)
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setVideoDownload_"))
+async def tidal_ng_set_video_download_cb(c, cb: CallbackQuery):
+    await handle_toggle_setting(cb, 'tidal_ng_video_download', "Download Videos", True, tidal_ng_video_cb)
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setVideoConvert_"))
+async def tidal_ng_set_video_convert_cb(c, cb: CallbackQuery):
+    await handle_toggle_setting(cb, 'tidal_ng_video_convert', "Convert to MP4", True, tidal_ng_video_cb)
 
 
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNgLogin"))

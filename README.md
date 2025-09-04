@@ -184,7 +184,10 @@ The Tidal NG provider is highly configurable directly from the bot's settings me
         -   `Cover Art Dimension`: Choose the resolution for embedded cover art (`320px`, `640px`, `1280px`).
     -   **File Settings**:
         -   `Create .m3u8 Playlist`: Toggle the creation of a `.m3u8` playlist file for albums and playlists.
+        -   `Symlink to Track`: Toggle whether to download tracks to a central folder and create symlinks.
     -   **Video Settings**:
+        -   `Download Videos`: Toggle whether to download videos at all.
+        -   `Convert Videos to MP4`: Toggle automatic conversion of video files to MP4.
         -   `Video Quality`: Choose your preferred video download quality (`360p`, `480p`, `720p`, `1080p`).
     -   **Login/Logout**: Manage your `tidal-dl-ng` session from the main panel.
 

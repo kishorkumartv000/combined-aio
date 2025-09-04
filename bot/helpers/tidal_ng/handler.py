@@ -102,6 +102,10 @@ async def start_tidal_ng(link: str, user: dict):
             apply_user_setting(new_settings, user_id, 'tidal_ng_playlist_create', 'playlist_create', is_bool=True)
             apply_user_setting(new_settings, user_id, 'tidal_ng_cover_dim', 'metadata_cover_dimension', is_int=True)
             apply_user_setting(new_settings, user_id, 'tidal_ng_video_quality', 'quality_video')
+            # Add the final three settings
+            apply_user_setting(new_settings, user_id, 'tidal_ng_symlink', 'symlink_to_track', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_video_convert', 'video_convert_mp4', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_video_download', 'video_download', is_bool=True)
 
         # Write the modified settings
         with open(TIDAL_DL_NG_SETTINGS_PATH, 'w') as f:
