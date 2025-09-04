@@ -36,51 +36,51 @@ async def start_tidal_ng(link: str, user: dict):
 
     This function prepares the environment for the CLI tool by:
     1. Checking for and performing a one-time setup if needed.
-    2. Determining the correct download path.
+    2. Determining the correct download path based on a 3-level priority.
     3. Modifying the tool's settings.json with user preferences.
     4. Executing the CLI tool as a subprocess.
     5. Providing real-time progress feedback.
     6. Restoring the original settings.json afterwards.
     """
     bot_msg = user.get('bot_msg')
-
-    # 1. Determine the download path
-    if Config.TIDAL_NG_DOWNLOAD_PATH:
-        download_path = Config.TIDAL_NG_DOWNLOAD_PATH
-    else:
-        download_path = os.path.join(Config.DOWNLOAD_BASE_DIR, str(user.get('user_id')), user.get('task_id'))
-
-    os.makedirs(download_path, exist_ok=True)
-    LOGGER.info(f"Tidal-NG download path set to: {download_path}")
-
     original_settings = None
+    final_download_path = None
+
     try:
-        # One-time setup: Check if settings.json exists. If not, create it.
+        # --- One-time setup & Initial Read ---
         if not os.path.exists(TIDAL_DL_NG_SETTINGS_PATH):
-            LOGGER.info(f"Tidal NG settings file not found. Running one-time setup...")
+            LOGGER.info("Tidal NG settings file not found. Running one-time setup...")
             await edit_message(bot_msg, "Tidal NG not yet configured. Performing one-time setup...")
-
             setup_cmd = ["python", TIDAL_DL_NG_CLI_PATH, "cfg"]
-            process = await asyncio.create_subprocess_exec(
-                *setup_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
+            process = await asyncio.create_subprocess_exec(*setup_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             await process.communicate()
-
             if process.returncode != 0:
                 raise Exception("Tidal NG one-time setup failed.")
-
             LOGGER.info("Tidal NG one-time setup successful.")
             await asyncio.sleep(1)
 
-        # Read the original settings
         with open(TIDAL_DL_NG_SETTINGS_PATH, 'r') as f:
             original_settings = json.load(f)
 
-        # Create a copy and update the settings
+        # --- Determine Download Path (3-level priority) ---
+        # 1. Highest Priority: Environment Variable
+        if Config.TIDAL_NG_DOWNLOAD_PATH:
+            final_download_path = Config.TIDAL_NG_DOWNLOAD_PATH
+            LOGGER.info(f"Using download path from env var: {final_download_path}")
+        # 2. Second Priority: Custom path in user's settings.json
+        elif original_settings.get('download_base_path') and original_settings['download_base_path'] != '~/download':
+            final_download_path = original_settings['download_base_path']
+            LOGGER.info(f"Using download path from user's settings.json: {final_download_path}")
+        # 3. Default: Bot-managed unique task directory
+        else:
+            final_download_path = os.path.join(Config.DOWNLOAD_BASE_DIR, str(user.get('user_id')), user.get('task_id'))
+            LOGGER.info(f"Using default bot-managed download path: {final_download_path}")
+
+        os.makedirs(final_download_path, exist_ok=True)
+
+        # --- Apply Settings ---
         new_settings = original_settings.copy()
-        new_settings['download_base_path'] = download_path
+        new_settings['download_base_path'] = final_download_path
 
         def apply_user_setting(settings_dict, user_id, db_key, json_key, is_bool=False, is_int=False):
             value_str = user_set_db.get_user_setting(user_id, db_key)
@@ -132,15 +132,15 @@ async def start_tidal_ng(link: str, user: dict):
         if process.returncode == 0:
             LOGGER.info("Tidal-NG download process completed successfully.")
             await edit_message(bot_msg, "✅ Tidal NG download complete. Preparing upload...")
-            user['download_path'] = download_path
+            user['download_path'] = final_download_path
         else:
             raise Exception("Tidal-NG download process failed.")
 
     except Exception as e:
         LOGGER.error(f"An error occurred in start_tidal_ng: {e}", exc_info=True)
         await edit_message(bot_msg, f"❌ **Fatal Error:** An unexpected error occurred: {e}")
-        if os.path.exists(download_path):
-            shutil.rmtree(download_path, ignore_errors=True)
+        if final_download_path and os.path.exists(final_download_path):
+            shutil.rmtree(final_download_path, ignore_errors=True)
 
     finally:
         if original_settings:
