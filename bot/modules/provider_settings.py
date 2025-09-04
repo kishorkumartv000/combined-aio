@@ -17,6 +17,60 @@ import os
 import json
 
 
+@Client.on_message(filters.document & filters.private)
+async def handle_file_swap(c: Client, msg: Message):
+    user_id = msg.from_user.id
+    state = await conversation_state.get(user_id)
+
+    if not state:
+        return
+
+    state_name = state.get('name')
+    if state_name not in ["awaiting_token_file", "awaiting_settings_file"]:
+        return
+
+    # --- Configuration based on state ---
+    if state_name == "awaiting_token_file":
+        expected_filename = "token.json"
+        target_dir = "/root/.config/tidal_dl_ng-dev/"
+        success_msg = "✅ Token Swap Successful!"
+        invalid_json_msg = "❌ **Invalid JSON:** The uploaded file is not a valid `token.json`."
+    else: # awaiting_settings_file
+        expected_filename = "settings.json"
+        target_dir = "/root/.config/tidal_dl_ng/"
+        success_msg = "✅ Settings Import Successful!"
+        invalid_json_msg = "❌ **Invalid JSON:** The uploaded file is not a valid `settings.json`."
+
+    target_path = os.path.join(target_dir, expected_filename)
+
+    # --- Logic ---
+    if not msg.document or msg.document.file_name != expected_filename:
+        await c.send_message(user_id, f"❌ **Invalid File:** Please upload a file named `{expected_filename}`.")
+        await conversation_state.clear(user_id)
+        return
+
+    progress_msg = await c.send_message(user_id, f"Downloading and validating `{expected_filename}`...")
+    temp_path = None
+    try:
+        temp_path = await msg.download_media()
+        with open(temp_path, 'r') as f:
+            json.load(f)
+
+        os.makedirs(target_dir, exist_ok=True)
+        os.replace(temp_path, target_path)
+
+        await edit_message(progress_msg, success_msg)
+
+    except json.JSONDecodeError:
+        await edit_message(progress_msg, invalid_json_msg)
+    except Exception as e:
+        await edit_message(progress_msg, f"❌ **An Error Occurred:**\n`{str(e)}`")
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+        await conversation_state.clear(user_id)
+
+
 @Client.on_callback_query(filters.regex(pattern=r"^providerPanel"))
 async def provider_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
