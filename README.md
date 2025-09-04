@@ -168,24 +168,20 @@ Unlike the legacy provider which used a Python library directly, the Tidal NG ha
 
 This method is robust, clean, and allows the bot to leverage the full feature set of the underlying CLI tool.
 
-### Configuration
+### Configuration & Settings
 
-The download location for Tidal NG is managed automatically, but can be customized.
+The Tidal NG provider is highly configurable directly from the bot's settings menu.
 
--   **Default Behavior**: By default, each download is saved to a unique directory within the bot's main download folder, structured like this:
-    ```
-    <DOWNLOAD_BASE_DIR>/<user_id>/<task_id>/
-    ```
--   **Optional Override**: For advanced users, you can specify a global download path for all Tidal NG downloads by setting the following optional environment variable in your `.env` file:
-    -   `TIDAL_NG_DOWNLOAD_PATH`: If set, all Tidal NG downloads will be saved here. For example: `TIDAL_NG_DOWNLOAD_PATH=/data/music/tidal`
+-   **Accessing Settings**: Navigate to `/settings` -> `Provider Settings` -> `Tidal NG`.
+-   **Available Settings**:
+    -   **Audio Quality**: Choose your preferred audio quality (`LOW`, `HIGH`, `LOSSLESS`, `HI_RES_LOSSLESS`). Your choice is saved per-user.
+    -   **Embed Lyrics**: Toggle whether lyrics are embedded into the audio file's metadata.
+    -   **Login/Logout**: Manage your `tidal-dl-ng` session.
 
-### Enabling Tidal NG
-
-The bot can switch between the new Tidal NG provider and the legacy one.
--   Go to `Settings -> Providers -> Tidal`.
--   You will see a toggle for `Legacy Mode`.
--   **Disable** `Legacy Mode` to use the new Tidal NG provider.
--   **Enable** `Legacy Mode` to use the old provider.
+-   **Download Path**: The download location is managed automatically, but can be customized.
+    -   **Default Behavior**: By default, each download is saved to a unique directory: `<DOWNLOAD_BASE_DIR>/<user_id>/<task_id>/`.
+    -   **Optional Override**: For advanced users, you can set a global download path via the `.env` file:
+        -   `TIDAL_NG_DOWNLOAD_PATH`: If set, all Tidal NG downloads will be saved to this directory.
 
 ### Features
 

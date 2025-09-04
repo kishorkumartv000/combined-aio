@@ -8,7 +8,7 @@ from config import Config
 
 from ..settings import bot_set
 from ..helpers.buttons.settings import *
-from ..helpers.database.pg_impl import set_db
+from ..helpers.database.pg_impl import set_db, user_set_db
 from ..helpers.tidal.tidal_api import tidalapi
 
 from ..helpers.message import edit_message, check_user
@@ -34,10 +34,10 @@ async def provider_cb(c, cb: CallbackQuery):
             ])
         if bot_set.can_enable_tidal:
             buttons.append([
-                InlineKeyboardButton(lang.s.TIDAL, callback_data="tdP")
+                InlineKeyboardButton("Tidal (Legacy)", callback_data="tdP")
             ])
             buttons.append([
-                InlineKeyboardButton("Tidal DL NG", callback_data="tidalNgP")
+                InlineKeyboardButton("Tidal NG", callback_data="tidalNgP")
             ])
 
         buttons += [
@@ -367,7 +367,20 @@ async def tidal_remove_login_cb(c: Client, cb: CallbackQuery):
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNgP"))
 async def tidal_ng_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
+        current_quality = user_set_db.get_user_setting(user_id, 'tidal_ng_quality') or "HIGH"
+        lyrics_embedded_str = user_set_db.get_user_setting(user_id, 'tidal_ng_lyrics')
+        lyrics_embedded = lyrics_embedded_str == 'True' if lyrics_embedded_str is not None else False
+
         buttons = [
+            [
+                InlineKeyboardButton("Audio Quality", callback_data="tidalNg_quality"),
+                InlineKeyboardButton(f"{current_quality} ✅", callback_data="tidalNg_quality")
+            ],
+            [
+                InlineKeyboardButton("Embed Lyrics", callback_data="tidalNg_lyrics"),
+                InlineKeyboardButton(f"{'ON' if lyrics_embedded else 'OFF'}", callback_data="tidalNg_lyrics")
+            ],
             [
                 InlineKeyboardButton("🔑 Login", callback_data="tidalNgLogin"),
                 InlineKeyboardButton("🚨 Logout", callback_data="tidalNgLogout")
@@ -378,10 +391,84 @@ async def tidal_ng_cb(c, cb: CallbackQuery):
         ]
         await edit_message(
             cb.message,
-            "**Tidal DL NG Settings**\n\n"
-            "Use the buttons below to manage your Tidal DL NG session.",
+            "**Tidal NG Settings**\n\n"
+            "Configure your download settings for the Tidal NG provider.",
             InlineKeyboardMarkup(buttons)
         )
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_quality"))
+async def tidal_ng_quality_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
+        current_quality = user_set_db.get_user_setting(user_id, 'tidal_ng_quality') or "HIGH"
+
+        qualities = ["LOW", "HIGH", "LOSSLESS", "HI_RES_LOSSLESS"]
+        buttons = []
+        for q in qualities:
+            text = q
+            if q == current_quality:
+                text += " ✅"
+            buttons.append([InlineKeyboardButton(text, callback_data=f"tidalNg_setQuality_{q}")])
+
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")])
+
+        await edit_message(
+            cb.message,
+            "**Select Audio Quality**\n\n"
+            "Choose your preferred audio quality for Tidal NG downloads.",
+            InlineKeyboardMarkup(buttons)
+        )
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setQuality_"))
+async def tidal_ng_set_quality_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
+        quality_to_set = cb.data.split('_')[-1]
+
+        user_set_db.set_user_setting(user_id, 'tidal_ng_quality', quality_to_set)
+        await c.answer_callback_query(cb.id, f"Audio quality set to {quality_to_set}", show_alert=False)
+
+        # Go back to the main Tidal NG menu to show the change
+        await tidal_ng_cb(c, cb)
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_lyrics"))
+async def tidal_ng_lyrics_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
+        lyrics_embedded_str = user_set_db.get_user_setting(user_id, 'tidal_ng_lyrics')
+        lyrics_embedded = lyrics_embedded_str == 'True' if lyrics_embedded_str is not None else False
+
+        buttons = [
+            [InlineKeyboardButton(f"Embed Lyrics: {'✅ ON' if lyrics_embedded else '❌ OFF'}", callback_data="tidalNg_setLyrics_toggle")],
+            [InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]
+        ]
+
+        await edit_message(
+            cb.message,
+            "**Embed Lyrics**\n\n"
+            "Enable or disable embedding lyrics into the audio file metadata.",
+            InlineKeyboardMarkup(buttons)
+        )
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setLyrics_"))
+async def tidal_ng_set_lyrics_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
+        lyrics_embedded_str = user_set_db.get_user_setting(user_id, 'tidal_ng_lyrics')
+        current_status = lyrics_embedded_str == 'True' if lyrics_embedded_str is not None else False
+
+        new_status = not current_status
+        user_set_db.set_user_setting(user_id, 'tidal_ng_lyrics', new_status)
+
+        status_text = "Enabled" if new_status else "Disabled"
+        await c.answer_callback_query(cb.id, f"Embedding lyrics {status_text}", show_alert=False)
+
+        # Go back to the main Tidal NG menu to show the change
+        await tidal_ng_cb(c, cb)
 
 
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNgLogin"))
