@@ -119,6 +119,48 @@ sudo docker run -d --env-file .env --name siesta project-siesta
 
 TON - `UQBBPkWSnbMWXrM6P-pb96wYxQzLjZ2hhuYfsO-N2pVmznCG`
 
+## Tidal NG Downloader (Beta)
+
+This bot features a modern, robust backend for handling Tidal downloads, referred to as "Tidal NG" (Next Generation). It operates by interfacing with a powerful external command-line tool, `tidal-dl-ng`.
+
+### How It Works
+
+Unlike the legacy provider which used a Python library directly, the Tidal NG handler acts as a smart controller for the `tidal-dl-ng` CLI tool. When you request a Tidal download:
+1.  The bot determines the correct, isolated directory for the current download task.
+2.  It programmatically modifies the `tidal-dl-ng` tool's own `settings.json` file to set the `download_base_path` and any user-specific settings.
+3.  It executes the CLI tool (`python cli.py dl <URL>`), which then downloads the music to the location specified by the bot.
+4.  After the download is complete or fails, the bot restores the `settings.json` file to its original state to ensure system integrity.
+
+**Note on First Use**: The configuration directory (`/root/.config/tidal_dl_ng/`) and `settings.json` file for the tool are created automatically the first time you use any Tidal NG feature. No manual setup is required.
+
+### Configuration & Settings
+
+The Tidal NG provider is highly configurable directly from the bot's settings menu. All settings are saved on a per-user basis.
+
+-   **Accessing Settings**: Navigate to `/settings` -> `Provider Settings` -> `Tidal NG`. This will open the main settings panel, which is organized into the following sub-menus.
+
+-   **Available Settings**:
+    -   **Audio Settings**:
+        -   `Audio Quality`: Choose your preferred audio quality (`LOW`, `HIGH`, `LOSSLESS`, `HI_RES_LOSSLESS`).
+        -   `Replay Gain`: Toggle whether to write replay gain information to metadata.
+    -   **Metadata Settings**:
+        -   `Embed Lyrics`: Toggle embedding lyrics into the audio file.
+        -   `Save Lyrics File`: Toggle saving lyrics to a separate `.lrc` file.
+        -   `Cover Art Dimension`: Choose the resolution for embedded cover art (`320px`, `640px`, `1280px`).
+    -   **File Settings**:
+        -   `Create .m3u8 Playlist`: Toggle the creation of a `.m3u8` playlist file for albums and playlists.
+        -   `Symlink to Track`: Toggle whether to download tracks to a central folder and create symlinks.
+    -   **Video Settings**:
+        -   `Download Videos`: Toggle whether to download videos at all.
+        -   `Convert Videos to MP4`: Toggle automatic conversion of video files to MP4.
+        -   `Video Quality`: Choose your preferred video download quality (`360p`, `480p`, `720p`, `1080p`).
+    -   **Login/Logout**: Manage your `tidal-dl-ng` session from the main panel.
+
+-   **Download Path**: The download location is also managed automatically, but can be customized.
+    -   **Default Behavior**: By default, each download is saved to a unique directory: `<DOWNLOAD_BASE_DIR>/<user_id>/<task_id>/`.
+    -   **Optional Override**: For advanced users, you can set a global download path via the `.env` file:
+        -   `TIDAL_NG_DOWNLOAD_PATH`: If set, all Tidal NG downloads will be saved to this directory.
+
 ## Apple Wrapper Controls (Apple Music)
 
 - **Location**: `Settings -> Providers -> Apple Music`
@@ -153,58 +195,6 @@ TON - `UQBBPkWSnbMWXrM6P-pb96wYxQzLjZ2hhuYfsO-N2pVmznCG`
 - Credentials are only used to start the setup process and are not stored by the bot.
 - You can cancel the flow any time by sending `/cancel`.
 - If 2FA prompt does not appear (rare), setup continues and completes automatically.
-
-## Tidal NG Downloader (Beta)
-
-This bot features a modern, robust backend for handling Tidal downloads, referred to as "Tidal NG" (Next Generation). It operates by interfacing with a powerful external command-line tool, `tidal-dl-ng`.
-
-### How It Works
-
-Unlike the legacy provider which used a Python library directly, the Tidal NG handler acts as a smart controller for the `tidal-dl-ng` CLI tool. When you request a Tidal download:
-1.  The bot determines the correct, isolated directory for the current download task.
-2.  It programmatically modifies the `tidal-dl-ng` tool's own `settings.json` file to set the `download_base_path` to this directory.
-3.  It executes the CLI tool (`python cli.py dl <URL>`), which then downloads the music to the location specified by the bot.
-4.  After the download is complete or fails, the bot restores the `settings.json` file to its original state to ensure system integrity.
-
-This method is robust, clean, and allows the bot to leverage the full feature set of the underlying CLI tool.
-
-### Configuration & Settings
-
-The Tidal NG provider is highly configurable directly from the bot's settings menu.
-
--   **Accessing Settings**: Navigate to `/settings` -> `Provider Settings` -> `Tidal NG`. This will open the main settings panel, which is organized into the following sub-menus.
-
--   **Available Settings**:
-    -   **Audio Settings**:
-        -   `Audio Quality`: Choose your preferred audio quality (`LOW`, `HIGH`, `LOSSLESS`, `HI_RES_LOSSLESS`).
-        -   `Replay Gain`: Toggle whether to write replay gain information to metadata.
-    -   **Metadata Settings**:
-        -   `Embed Lyrics`: Toggle embedding lyrics into the audio file.
-        -   `Save Lyrics File`: Toggle saving lyrics to a separate `.lrc` file.
-        -   `Cover Art Dimension`: Choose the resolution for embedded cover art (`320px`, `640px`, `1280px`).
-    -   **File Settings**:
-        -   `Create .m3u8 Playlist`: Toggle the creation of a `.m3u8` playlist file for albums and playlists.
-        -   `Symlink to Track`: Toggle whether to download tracks to a central folder and create symlinks.
-    -   **Video Settings**:
-        -   `Download Videos`: Toggle whether to download videos at all.
-        -   `Convert Videos to MP4`: Toggle automatic conversion of video files to MP4.
-        -   `Video Quality`: Choose your preferred video download quality (`360p`, `480p`, `720p`, `1080p`).
-    -   **Login/Logout**: Manage your `tidal-dl-ng` session from the main panel.
-
--   **Download Path**: The download location is also managed automatically, but can be customized.
-    -   **Default Behavior**: By default, each download is saved to a unique directory: `<DOWNLOAD_BASE_DIR>/<user_id>/<task_id>/`.
-    -   **Optional Override**: For advanced users, you can set a global download path via the `.env` file:
-        -   `TIDAL_NG_DOWNLOAD_PATH`: If set, all Tidal NG downloads will be saved to this directory.
-
-### Features
-
-The `tidal-dl-ng` backend supports a wide range of features, including:
--   Downloading tracks, albums, playlists, and mixes.
--   Multiple audio quality levels: LOW, HIGH, LOSSLESS, and HI_RES_LOSSLESS.
--   Support for downloading music videos.
--   Automatic extraction of FLAC audio from MP4 containers.
--   Embedding of metadata, cover art, and lyrics.
--   Highly configurable file and folder naming formats via the `settings.json` file.
 
 ## Commands and Usage
 
