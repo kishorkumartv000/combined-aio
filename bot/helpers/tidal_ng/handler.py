@@ -5,6 +5,7 @@ import shutil
 from config import Config
 from ..message import edit_message, send_message
 from bot.logger import LOGGER
+from ..database.pg_impl import user_set_db
 
 # Define the path to the tidal-dl-ng CLI script
 TIDAL_DL_NG_CLI_PATH = "/usr/src/app/tidal-dl-ng/tidal_dl_ng/cli.py"
@@ -70,9 +71,23 @@ async def start_tidal_ng(link: str, user: dict):
         with open(TIDAL_DL_NG_SETTINGS_PATH, 'r') as f:
             original_settings = json.load(f)
 
-        # Create a copy and update the download path
+        # Create a copy and update the settings
         new_settings = original_settings.copy()
         new_settings['download_base_path'] = download_path
+
+        # Apply user-specific settings from the database
+        user_id = user.get('user_id')
+        if user_id:
+            user_quality = user_set_db.get_user_setting(user_id, 'tidal_ng_quality')
+            if user_quality:
+                new_settings['quality_audio'] = user_quality
+                LOGGER.info(f"Applying user quality for {user_id}: {user_quality}")
+
+            user_lyrics_str = user_set_db.get_user_setting(user_id, 'tidal_ng_lyrics')
+            if user_lyrics_str is not None:
+                user_lyrics_bool = user_lyrics_str == 'True'
+                new_settings['lyrics_embed'] = user_lyrics_bool
+                LOGGER.info(f"Applying user lyrics setting for {user_id}: {user_lyrics_bool}")
 
         # Write the modified settings
         with open(TIDAL_DL_NG_SETTINGS_PATH, 'w') as f:

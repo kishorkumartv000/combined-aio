@@ -161,3 +161,46 @@ class DownloadHistory(DataBaseHandle):
 # Initialize database handlers
 set_db = BotSettings()
 download_history = DownloadHistory()
+
+class UserSettings(DataBaseHandle):
+    def __init__(self, dburl=None):
+        if dburl is None:
+            dburl = Config.DATABASE_URL
+        super().__init__(dburl)
+
+        schema = """CREATE TABLE IF NOT EXISTS user_settings (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            setting_name VARCHAR(50) NOT NULL,
+            setting_value VARCHAR(2000),
+            UNIQUE(user_id, setting_name)
+        )"""
+        cur = self.scur()
+        cur.execute(schema)
+        self._conn.commit()
+        self.ccur(cur)
+
+    def set_user_setting(self, user_id, setting_name, setting_value):
+        sql = """
+        INSERT INTO user_settings (user_id, setting_name, setting_value)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (user_id, setting_name)
+        DO UPDATE SET setting_value = EXCLUDED.setting_value;
+        """
+        cur = self.scur()
+        cur.execute(sql, (user_id, setting_name, str(setting_value)))
+        self._conn.commit()
+        self.ccur(cur)
+
+    def get_user_setting(self, user_id, setting_name):
+        sql = "SELECT setting_value FROM user_settings WHERE user_id = %s AND setting_name = %s"
+        cur = self.scur()
+        cur.execute(sql, (user_id, setting_name))
+        if cur.rowcount > 0:
+            val = cur.fetchone()[0]
+            self.ccur(cur)
+            return val
+        self.ccur(cur)
+        return None
+
+user_set_db = UserSettings()
