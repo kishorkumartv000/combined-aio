@@ -364,30 +364,48 @@ async def tidal_remove_login_cb(c: Client, cb: CallbackQuery):
 #--------------------
 # TIDAL DL NG
 #--------------------
+
+# --- Helpers ---
+def get_tidal_ng_setting(user_id, key, default_value, is_bool=False):
+    val_str = user_set_db.get_user_setting(user_id, key)
+    if val_str is None:
+        return default_value
+    if is_bool:
+        return val_str == 'True'
+    return val_str
+
+def create_toggle_button(user_id, key, text, default_value, callback_data_prefix):
+    is_on = get_tidal_ng_setting(user_id, key, default_value, is_bool=True)
+    status = "✅ ON" if is_on else "❌ OFF"
+    return [InlineKeyboardButton(f"{text}: {status}", callback_data=f"{callback_data_prefix}_toggle")]
+
+async def handle_toggle_setting(cb, key, text, default_value, back_callback):
+    user_id = cb.from_user.id
+    current_status = get_tidal_ng_setting(user_id, key, default_value, is_bool=True)
+    new_status = not current_status
+    user_set_db.set_user_setting(user_id, key, new_status)
+    status_text = "Enabled" if new_status else "Disabled"
+    await cb.answer(f"{text} {status_text}", show_alert=False)
+    await back_callback(None, cb)
+
+# --- Main Menu ---
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNgP"))
 async def tidal_ng_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
-        user_id = cb.from_user.id
-        current_quality = user_set_db.get_user_setting(user_id, 'tidal_ng_quality') or "HIGH"
-        lyrics_embedded_str = user_set_db.get_user_setting(user_id, 'tidal_ng_lyrics')
-        lyrics_embedded = lyrics_embedded_str == 'True' if lyrics_embedded_str is not None else False
-
         buttons = [
             [
-                InlineKeyboardButton("Audio Quality", callback_data="tidalNg_quality"),
-                InlineKeyboardButton(f"{current_quality} ✅", callback_data="tidalNg_quality")
+                InlineKeyboardButton("🎧 Audio Settings", callback_data="tidalNg_audio"),
+                InlineKeyboardButton("📝 Metadata Settings", callback_data="tidalNg_metadata")
             ],
             [
-                InlineKeyboardButton("Embed Lyrics", callback_data="tidalNg_lyrics"),
-                InlineKeyboardButton(f"{'ON' if lyrics_embedded else 'OFF'}", callback_data="tidalNg_lyrics")
+                InlineKeyboardButton("🗂️ File Settings", callback_data="tidalNg_file"),
+                InlineKeyboardButton("🎬 Video Settings", callback_data="tidalNg_video")
             ],
             [
                 InlineKeyboardButton("🔑 Login", callback_data="tidalNgLogin"),
                 InlineKeyboardButton("🚨 Logout", callback_data="tidalNgLogout")
             ],
-            [
-                InlineKeyboardButton("🔙 Back", callback_data="providerPanel")
-            ]
+            [InlineKeyboardButton("🔙 Back", callback_data="providerPanel")]
         ]
         await edit_message(
             cb.message,
@@ -396,80 +414,124 @@ async def tidal_ng_cb(c, cb: CallbackQuery):
             InlineKeyboardMarkup(buttons)
         )
 
-
-@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_quality"))
-async def tidal_ng_quality_cb(c, cb: CallbackQuery):
+# --- Audio Settings ---
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_audio$"))
+async def tidal_ng_audio_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         user_id = cb.from_user.id
-        current_quality = user_set_db.get_user_setting(user_id, 'tidal_ng_quality') or "HIGH"
+        quality = get_tidal_ng_setting(user_id, 'tidal_ng_quality', "HIGH")
+        replay_gain = get_tidal_ng_setting(user_id, 'tidal_ng_replay_gain', False, is_bool=True)
 
+        buttons = [
+            [InlineKeyboardButton("Audio Quality", callback_data="tidalNg_qualitySel"), InlineKeyboardButton(f"{quality} ✅", callback_data="tidalNg_qualitySel")],
+            create_toggle_button(user_id, 'tidal_ng_replay_gain', "Replay Gain", False, "tidalNg_setReplayGain"),
+            [InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]
+        ]
+        await edit_message(cb.message, "🎧 **Audio Settings**", InlineKeyboardMarkup(buttons))
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setReplayGain_"))
+async def tidal_ng_set_replay_gain_cb(c, cb: CallbackQuery):
+    await handle_toggle_setting(cb, 'tidal_ng_replay_gain', "Replay Gain", False, tidal_ng_audio_cb)
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_qualitySel$"))
+async def tidal_ng_quality_sel_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
+        current_quality = get_tidal_ng_setting(user_id, 'tidal_ng_quality', "HIGH")
         qualities = ["LOW", "HIGH", "LOSSLESS", "HI_RES_LOSSLESS"]
         buttons = []
         for q in qualities:
-            text = q
-            if q == current_quality:
-                text += " ✅"
-            buttons.append([InlineKeyboardButton(text, callback_data=f"tidalNg_setQuality_{q}")])
-
-        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")])
-
-        await edit_message(
-            cb.message,
-            "**Select Audio Quality**\n\n"
-            "Choose your preferred audio quality for Tidal NG downloads.",
-            InlineKeyboardMarkup(buttons)
-        )
-
+            buttons.append([InlineKeyboardButton(f"{q}{' ✅' if q == current_quality else ''}", callback_data=f"tidalNg_setQuality_{q}")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="tidalNg_audio")])
+        await edit_message(cb.message, "**Select Audio Quality**", InlineKeyboardMarkup(buttons))
 
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setQuality_"))
 async def tidal_ng_set_quality_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         user_id = cb.from_user.id
-        # Correctly parse quality names that may contain underscores
         quality_to_set = "_".join(cb.data.split('_')[2:])
-
         user_set_db.set_user_setting(user_id, 'tidal_ng_quality', quality_to_set)
-        await c.answer_callback_query(cb.id, f"Audio quality set to {quality_to_set}", show_alert=False)
+        await cb.answer(f"Audio quality set to {quality_to_set}", show_alert=False)
+        await tidal_ng_audio_cb(c, cb)
 
-        # Go back to the main Tidal NG menu to show the change
-        await tidal_ng_cb(c, cb)
-
-
-@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_lyrics"))
-async def tidal_ng_lyrics_cb(c, cb: CallbackQuery):
+# --- Metadata Settings ---
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_metadata$"))
+async def tidal_ng_metadata_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         user_id = cb.from_user.id
-        lyrics_embedded_str = user_set_db.get_user_setting(user_id, 'tidal_ng_lyrics')
-        lyrics_embedded = lyrics_embedded_str == 'True' if lyrics_embedded_str is not None else False
-
+        cover_dim = get_tidal_ng_setting(user_id, 'tidal_ng_cover_dim', "320")
         buttons = [
-            [InlineKeyboardButton(f"Embed Lyrics: {'✅ ON' if lyrics_embedded else '❌ OFF'}", callback_data="tidalNg_setLyrics_toggle")],
+            create_toggle_button(user_id, 'tidal_ng_lyrics', "Embed Lyrics", False, "tidalNg_setLyrics"),
+            create_toggle_button(user_id, 'tidal_ng_lyrics_file', "Save Lyrics File", False, "tidalNg_setLyricsFile"),
+            [InlineKeyboardButton("Cover Art Dimension", callback_data="tidalNg_coverDimSel"), InlineKeyboardButton(f"{cover_dim}px ✅", callback_data="tidalNg_coverDimSel")],
             [InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]
         ]
-
-        await edit_message(
-            cb.message,
-            "**Embed Lyrics**\n\n"
-            "Enable or disable embedding lyrics into the audio file metadata.",
-            InlineKeyboardMarkup(buttons)
-        )
-
+        await edit_message(cb.message, "📝 **Metadata Settings**", InlineKeyboardMarkup(buttons))
 
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setLyrics_"))
 async def tidal_ng_set_lyrics_cb(c, cb: CallbackQuery):
+    await handle_toggle_setting(cb, 'tidal_ng_lyrics', "Embed Lyrics", False, tidal_ng_metadata_cb)
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setLyricsFile_"))
+async def tidal_ng_set_lyrics_file_cb(c, cb: CallbackQuery):
+    await handle_toggle_setting(cb, 'tidal_ng_lyrics_file', "Save Lyrics File", False, tidal_ng_metadata_cb)
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_coverDimSel$"))
+async def tidal_ng_cover_dim_sel_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         user_id = cb.from_user.id
-        lyrics_embedded_str = user_set_db.get_user_setting(user_id, 'tidal_ng_lyrics')
-        current_status = lyrics_embedded_str == 'True' if lyrics_embedded_str is not None else False
+        current_dim = get_tidal_ng_setting(user_id, 'tidal_ng_cover_dim', "320")
+        dims = ["320", "640", "1280"]
+        buttons = []
+        for d in dims:
+            buttons.append([InlineKeyboardButton(f"{d}px{' ✅' if d == current_dim else ''}", callback_data=f"tidalNg_setCoverDim_{d}")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="tidalNg_metadata")])
+        await edit_message(cb.message, "**Select Cover Art Dimension**", InlineKeyboardMarkup(buttons))
 
-        new_status = not current_status
-        user_set_db.set_user_setting(user_id, 'tidal_ng_lyrics', new_status)
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setCoverDim_"))
+async def tidal_ng_set_cover_dim_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
+        dim_to_set = cb.data.split('_')[-1]
+        user_set_db.set_user_setting(user_id, 'tidal_ng_cover_dim', dim_to_set)
+        await cb.answer(f"Cover dimension set to {dim_to_set}px", show_alert=False)
+        await tidal_ng_metadata_cb(c, cb)
 
-        status_text = "Enabled" if new_status else "Disabled"
-        await c.answer_callback_query(cb.id, f"Embedding lyrics {status_text}", show_alert=False)
+# --- File Settings ---
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_file$"))
+async def tidal_ng_file_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        buttons = [
+            create_toggle_button(cb.from_user.id, 'tidal_ng_playlist_create', "Create .m3u8 Playlist", False, "tidalNg_setPlaylistCreate"),
+            [InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]
+        ]
+        await edit_message(cb.message, "🗂️ **File Settings**", InlineKeyboardMarkup(buttons))
 
-        # Go back to the main Tidal NG menu to show the change
-        await tidal_ng_cb(c, cb)
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setPlaylistCreate_"))
+async def tidal_ng_set_playlist_create_cb(c, cb: CallbackQuery):
+    await handle_toggle_setting(cb, 'tidal_ng_playlist_create', "Create .m3u8 Playlist", False, tidal_ng_file_cb)
+
+# --- Video Settings ---
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_video$"))
+async def tidal_ng_video_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
+        current_quality = get_tidal_ng_setting(user_id, 'tidal_ng_video_quality', "480")
+        qualities = ["360", "480", "720", "1080"]
+        buttons = []
+        for q in qualities:
+            buttons.append([InlineKeyboardButton(f"{q}p{' ✅' if q == current_quality else ''}", callback_data=f"tidalNg_setVideoQuality_{q}")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")])
+        await edit_message(cb.message, "**Select Video Quality**", InlineKeyboardMarkup(buttons))
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setVideoQuality_"))
+async def tidal_ng_set_video_quality_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        user_id = cb.from_user.id
+        quality_to_set = cb.data.split('_')[-1]
+        user_set_db.set_user_setting(user_id, 'tidal_ng_video_quality', quality_to_set)
+        await cb.answer(f"Video quality set to {quality_to_set}p", show_alert=False)
+        await tidal_ng_video_cb(c, cb)
 
 
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNgLogin"))
