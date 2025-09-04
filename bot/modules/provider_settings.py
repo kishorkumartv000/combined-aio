@@ -18,7 +18,7 @@ import json
 
 
 @Client.on_message(filters.document & filters.private)
-async def handle_tidal_ng_file_upload(c: Client, msg: Message):
+async def handle_tidal_ng_config_upload(c: Client, msg: Message):
     user_id = msg.from_user.id
     state = await conversation_state.get(user_id)
 
@@ -28,34 +28,29 @@ async def handle_tidal_ng_file_upload(c: Client, msg: Message):
     if not msg.document:
         return
 
-    target_dir = "/root/.config/tidal_dl_ng-dev/"
+    target_dir = state.get('data', {}).get('target_dir')
+    if not target_dir:
+        await c.send_message(user_id, "❌ An error occurred. The target directory was not set. Please start over.")
+        await conversation_state.clear(user_id)
+        return
+
     original_filename = msg.document.file_name
     target_path = os.path.join(target_dir, original_filename)
 
     progress_msg = await c.send_message(user_id, f"Importing `{original_filename}`...")
     temp_path = None
     try:
-        # Download to a temporary path first
         temp_path = await msg.download_media()
-
-        # Ensure the target directory exists (it should, but double-check)
         os.makedirs(target_dir, exist_ok=True)
-
-        # Move the file to the final destination
         os.replace(temp_path, target_path)
-
-        # Set permissions
         os.chmod(target_path, 0o666)
-
-        await edit_message(progress_msg, f"✅ **Import Successful!**\nFile `{original_filename}` has been saved.")
+        await edit_message(progress_msg, f"✅ **Import Successful!**\nFile `{original_filename}` has been saved to `{target_dir}`.")
 
     except Exception as e:
         await edit_message(progress_msg, f"❌ **An Error Occurred:**\n`{str(e)}`")
     finally:
-        # Clean up temporary file if it still exists
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
-        # Clear the user's state
         await conversation_state.clear(user_id)
 
 
@@ -451,7 +446,7 @@ async def tidal_ng_cb(c, cb: CallbackQuery):
                 InlineKeyboardButton("🚨 Logout", callback_data="tidalNgLogout")
             ],
             [
-                InlineKeyboardButton("📂 Import File", callback_data="tidalNg_importFile")
+                InlineKeyboardButton("📂 Import Config File", callback_data="tidalNg_importFile")
             ],
             [InlineKeyboardButton("🔙 Back", callback_data="providerPanel")]
         ]
@@ -468,36 +463,69 @@ async def tidal_ng_import_file_cb(c, cb: CallbackQuery):
     if not await check_user(cb.from_user.id, restricted=True):
         return
 
-    target_dir = "/root/.config/tidal_dl_ng-dev/"
+    buttons = [
+        [InlineKeyboardButton("main config (`tidal_dl_ng`)", callback_data="tidalNg_setImportDir|main")],
+        [InlineKeyboardButton("dev config (`tidal_dl_ng-dev`)", callback_data="tidalNg_setImportDir|dev")],
+        [InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]
+    ]
+    await edit_message(
+        cb.message,
+        "Please choose the destination directory for your configuration file.",
+        InlineKeyboardMarkup(buttons)
+    )
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_setImportDir\|"))
+async def tidal_ng_set_import_dir_cb(c, cb: CallbackQuery):
+    if not await check_user(cb.from_user.id, restricted=True):
+        return
+
+    choice = cb.data.split("|")[1]
+    if choice == "main":
+        target_dir = "/root/.config/tidal_dl_ng/"
+    else:
+        target_dir = "/root/.config/tidal_dl_ng-dev/"
 
     if not os.path.exists(target_dir):
         await edit_message(
             cb.message,
-            "The destination directory (`/root/.config/tidal_dl_ng-dev/`) does not exist. Shall I create it for you?",
+            f"The destination directory (`{target_dir}`) does not exist. Shall I create it for you?",
             InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Yes, create it", callback_data="tidalNg_createDir")],
+                [InlineKeyboardButton("✅ Yes, create it", callback_data=f"tidalNg_createDir|{choice}")],
                 [InlineKeyboardButton("❌ Cancel", callback_data="tidalNgP")]
             ])
         )
-
-@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_createDir$"))
-async def tidal_ng_create_dir_cb(c, cb: CallbackQuery):
-    if not await check_user(cb.from_user.id, restricted=True):
-        return
-
-    target_dir = "/root/.config/tidal_dl_ng-dev/"
-    try:
-        os.makedirs(target_dir, mode=0o777, exist_ok=True)
-        await cb.answer("Directory created successfully!", show_alert=False)
-        # Now ask for the file
+    else:
         await conversation_state.clear(cb.from_user.id)
-        await conversation_state.start(cb.from_user.id, "awaiting_tidal_ng_file", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
+        await conversation_state.start(cb.from_user.id, "awaiting_tidal_ng_file", {"target_dir": target_dir})
         await edit_message(
             cb.message,
             "Please upload the file you want to import. You can /cancel anytime.",
             InlineKeyboardMarkup([
                 [InlineKeyboardButton("❌ Cancel", callback_data="tidalNgP")]
             ])
+        )
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_createDir\|"))
+async def tidal_ng_create_dir_cb(c, cb: CallbackQuery):
+    if not await check_user(cb.from_user.id, restricted=True):
+        return
+
+    choice = cb.data.split("|")[1]
+    if choice == "main":
+        target_dir = "/root/.config/tidal_dl_ng/"
+    else:
+        target_dir = "/root/.config/tidal_dl_ng-dev/"
+
+    try:
+        os.makedirs(target_dir, mode=0o777, exist_ok=True)
+        await cb.answer("Directory created successfully!", show_alert=False)
+        # Now ask for the file
+        await conversation_state.clear(cb.from_user.id)
+        await conversation_state.start(cb.from_user.id, "awaiting_tidal_ng_file", {"target_dir": target_dir})
+        await edit_message(
+            cb.message,
+            "Please upload the file you want to import. You can /cancel anytime.",
+            InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="tidalNgP")]])
         )
     except Exception as e:
         await edit_message(
@@ -505,17 +533,28 @@ async def tidal_ng_create_dir_cb(c, cb: CallbackQuery):
             f"❌ **Failed to create directory:**\n`{str(e)}`",
             InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]])
         )
-    else:
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_tokenSwap$"))
+async def tidal_ng_token_swap_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
         await conversation_state.clear(cb.from_user.id)
-        await conversation_state.start(cb.from_user.id, "awaiting_tidal_ng_file", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
+        await conversation_state.start(cb.from_user.id, "awaiting_token_file", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
         await edit_message(
             cb.message,
-            "Please upload the file you want to import. You can /cancel anytime.",
-            InlineKeyboardMarkup([
-                [InlineKeyboardButton("❌ Cancel", callback_data="tidalNgP")]
-            ])
+            "Please upload your `token.json` file now.\n\nThis will replace your current token. You can /cancel anytime.",
+            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]])
         )
 
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_settingsSwap$"))
+async def tidal_ng_settings_swap_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        await conversation_state.clear(cb.from_user.id)
+        await conversation_state.start(cb.from_user.id, "awaiting_settings_file", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
+        await edit_message(
+            cb.message,
+            "Please upload your `settings.json` file now.\n\nThis will replace your current base settings. You can /cancel anytime.",
+            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]])
+        )
 
 # --- Audio Settings ---
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNg_audio$"))
