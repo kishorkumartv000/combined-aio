@@ -425,7 +425,8 @@ async def tidal_ng_quality_cb(c, cb: CallbackQuery):
 async def tidal_ng_set_quality_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         user_id = cb.from_user.id
-        quality_to_set = cb.data.split('_')[-1]
+        # Correctly parse quality names that may contain underscores
+        quality_to_set = "_".join(cb.data.split('_')[2:])
 
         user_set_db.set_user_setting(user_id, 'tidal_ng_quality', quality_to_set)
         await c.answer_callback_query(cb.id, f"Audio quality set to {quality_to_set}", show_alert=False)
