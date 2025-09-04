@@ -155,6 +155,7 @@ The Tidal NG provider is highly configurable directly from the bot's settings me
         -   `Convert Videos to MP4`: Toggle automatic conversion of video files to MP4.
         -   `Video Quality`: Choose your preferred video download quality (`360p`, `480p`, `720p`, `1080p`).
     -   **Login/Logout**: Manage your `tidal-dl-ng` session from the main panel.
+    -   **Token Swap**: For advanced users, this allows you to replace your authentication token by uploading a new `token.json` file. This is useful for sharing sessions or using an account without going through the interactive login.
 
 -   **Download Path**: The download location is also managed automatically, but can be customized.
     -   **Default Behavior**: By default, each download is saved to a unique directory: `<DOWNLOAD_BASE_DIR>/<user_id>/<task_id>/`.
