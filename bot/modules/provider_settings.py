@@ -8,7 +8,7 @@ from config import Config
 
 from ..settings import bot_set
 from ..helpers.buttons.settings import *
-from ..helpers.database.pg_impl import set_db, user_set_db
+from ..helpers.database.pg_impl import set_db
 from ..helpers.tidal.tidal_api import tidalapi
 
 from ..helpers.message import edit_message, check_user
@@ -34,10 +34,10 @@ async def provider_cb(c, cb: CallbackQuery):
             ])
         if bot_set.can_enable_tidal:
             buttons.append([
-                InlineKeyboardButton("Tidal (Legacy)", callback_data="tdP")
+                InlineKeyboardButton(lang.s.TIDAL, callback_data="tdP")
             ])
             buttons.append([
-                InlineKeyboardButton("Tidal NG", callback_data="tidalNgP")
+                InlineKeyboardButton("Tidal DL NG", callback_data="tidalNgP")
             ])
 
         buttons += [
@@ -420,7 +420,6 @@ async def tidal_ng_audio_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         user_id = cb.from_user.id
         quality = get_tidal_ng_setting(user_id, 'tidal_ng_quality', "HIGH")
-        replay_gain = get_tidal_ng_setting(user_id, 'tidal_ng_replay_gain', False, is_bool=True)
 
         buttons = [
             [InlineKeyboardButton("Audio Quality", callback_data="tidalNg_qualitySel"), InlineKeyboardButton(f"{quality} ✅", callback_data="tidalNg_qualitySel")],
@@ -523,12 +522,10 @@ async def tidal_ng_set_symlink_cb(c, cb: CallbackQuery):
 async def tidal_ng_video_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         user_id = cb.from_user.id
-        current_quality = get_tidal_ng_setting(user_id, 'tidal_ng_video_quality', "480")
-        qualities = ["360", "480", "720", "1080"]
         buttons = [
             create_toggle_button(user_id, 'tidal_ng_video_download', "Download Videos", True, "tidalNg_setVideoDownload"),
             create_toggle_button(user_id, 'tidal_ng_video_convert', "Convert to MP4", True, "tidalNg_setVideoConvert"),
-            [InlineKeyboardButton("Video Quality", callback_data="tidalNg_videoQualitySel"), InlineKeyboardButton(f"{current_quality}p ✅", callback_data="tidalNg_videoQualitySel")],
+            [InlineKeyboardButton("Video Quality", callback_data="tidalNg_videoQualitySel")],
             [InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]
         ]
         await edit_message(cb.message, "🎬 **Video Settings**", InlineKeyboardMarkup(buttons))
