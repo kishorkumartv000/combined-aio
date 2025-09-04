@@ -107,6 +107,7 @@ sudo docker run -d --env-file .env --name siesta project-siesta
 - `MAX_WORKERS` - Multithreading limit (kind of more speed) `(int)`
 - `TRACK_NAME_FORMAT` - Naming format for tracks (check [metadata](https://github.com/vinayak-7-0-3/Project-Siesta/blob/2bbea8572d660a92bb182a360e91791583f4523b/bot/helpers/metadata.py#L16) section for tags supported) `(str)`
 - `PLAYLIST_NAME_FORMAT` - Similar to `TRACK_NAME_FORMAT` but for Playlists (Note: all tags might not be available) `(str)`
+- `TIDAL_NG_DOWNLOAD_PATH` - Overrides the download path for the Tidal NG provider. If set, all Tidal NG downloads will be saved here, bypassing other settings. `(str)`
 
 ## CREDITS
 - OrpheusDL - https://github.com/yarrm80s/orpheusdl

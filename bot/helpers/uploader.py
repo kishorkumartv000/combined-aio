@@ -13,6 +13,32 @@ from bot.helpers.progress import ProgressReporter
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from ..helpers.state import conversation_state
 
+import os
+import shutil
+import zipfile
+import asyncio
+from config import Config
+from bot.helpers.utils import create_apple_zip, format_string, send_message, edit_message, zip_handler, MAX_SIZE
+from bot.logger import LOGGER
+from mutagen import File
+from mutagen.mp4 import MP4
+import re
+from bot.settings import bot_set
+from bot.helpers.progress import ProgressReporter
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from ..helpers.state import conversation_state
+
+def _get_provider_base_path(user_id: int, path: str) -> str:
+    """Determines the base path for rclone uploads based on the provider."""
+    user_id_str = str(user_id)
+    # This helps rclone create a cleaner remote path by providing a base.
+    if "Apple Music" in path:
+        return os.path.join(Config.LOCAL_STORAGE, user_id_str, "Apple Music")
+    elif "Tidal_NG" in path:
+        return os.path.join(Config.LOCAL_STORAGE, user_id_str, "Tidal_NG")
+    # Fallback for other providers or direct paths
+    return Config.LOCAL_STORAGE
+
 async def track_upload(metadata, user, index: int = None, total: int = None):
     """
     Upload a single track
@@ -22,11 +48,7 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
         index: Optional file index for progress display
         total: Optional total files for progress display
     """
-    # Determine base path for different providers
-    if "Apple Music" in metadata['filepath']:
-        base_path = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
-    else:
-        base_path = Config.LOCAL_STORAGE
+    base_path = _get_provider_base_path(user['user_id'], metadata['filepath'])
     
     if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
@@ -41,7 +63,7 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
                 {
                     'title': metadata['title'],
                     'artist': metadata['artist'],
-                    'provider': metadata.get('provider', 'Apple Music')
+                    'provider': metadata.get('provider', '--')
                 }
             ),
             meta={
@@ -63,7 +85,7 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
             {
                 'title': metadata['title'],
                 'artist': metadata['artist'],
-                'provider': metadata.get('provider', 'Apple Music'),
+                'provider': metadata.get('provider', '--'),
                 'r_link': rclone_link
             }
         )
@@ -84,11 +106,7 @@ async def music_video_upload(metadata, user):
         metadata: Video metadata
         user: User details
     """
-    # Determine base path for different providers
-    if "Apple Music" in metadata['filepath']:
-        base_path = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
-    else:
-        base_path = Config.LOCAL_STORAGE
+    base_path = _get_provider_base_path(user['user_id'], metadata['filepath'])
     
     if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
@@ -105,7 +123,7 @@ async def music_video_upload(metadata, user):
                 {
                     'title': metadata['title'],
                     'artist': metadata['artist'],
-                    'provider': metadata.get('provider', 'Apple Music')
+                    'provider': metadata.get('provider', '--')
                 }
             ),
             meta=metadata,  # PASS METADATA HERE
@@ -122,7 +140,7 @@ async def music_video_upload(metadata, user):
             {
                 'title': metadata['title'],
                 'artist': metadata['artist'],
-                'provider': metadata.get('provider', 'Apple Music'),
+                'provider': metadata.get('provider', '--'),
                 'r_link': rclone_link
             }
         )
@@ -154,11 +172,7 @@ async def album_upload(metadata, user):
         metadata: Album metadata
         user: User details
     """
-    # Determine base path for different providers
-    if "Apple Music" in metadata['folderpath']:
-        base_path = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
-    else:
-        base_path = Config.LOCAL_STORAGE
+    base_path = _get_provider_base_path(user['user_id'], metadata['folderpath'])
     
     if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
@@ -187,7 +201,7 @@ async def album_upload(metadata, user):
                 {
                     'album': metadata['title'],
                     'artist': metadata['artist'],
-                    'provider': metadata.get('provider', 'Apple Music')
+                    'provider': metadata.get('provider', '--')
                 }
             )
 
@@ -221,7 +235,7 @@ async def album_upload(metadata, user):
             {
                 'album': metadata['title'],
                 'artist': metadata['artist'],
-                'provider': metadata.get('provider', 'Apple Music'),
+                'provider': metadata.get('provider', '--'),
                 'r_link': rclone_link
             }
         )
@@ -244,11 +258,7 @@ async def artist_upload(metadata, user):
         metadata: Artist metadata
         user: User details
     """
-    # Determine base path for different providers
-    if "Apple Music" in metadata['folderpath']:
-        base_path = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
-    else:
-        base_path = Config.LOCAL_STORAGE
+    base_path = _get_provider_base_path(user['user_id'], metadata['folderpath'])
     
     if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
@@ -274,7 +284,7 @@ async def artist_upload(metadata, user):
                 "🎤 **{artist}**\n🎧 {provider} Discography",
                 {
                     'artist': metadata['title'],
-                    'provider': metadata.get('provider', 'Apple Music')
+                    'provider': metadata.get('provider', '--')
                 }
             )
             
@@ -310,7 +320,7 @@ async def artist_upload(metadata, user):
             "🎤 **{artist}**\n🎧 {provider} Discography\n🔗 [Direct Link]({r_link})",
             {
                 'artist': metadata['title'],
-                'provider': metadata.get('provider', 'Apple Music'),
+                'provider': metadata.get('provider', '--'),
                 'r_link': rclone_link
             }
         )
@@ -329,11 +339,7 @@ async def playlist_upload(metadata, user):
         metadata: Playlist metadata
         user: User details
     """
-    # Determine base path for different providers
-    if "Apple Music" in metadata['folderpath']:
-        base_path = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
-    else:
-        base_path = Config.LOCAL_STORAGE
+    base_path = _get_provider_base_path(user['user_id'], metadata['folderpath'])
     
     if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
@@ -361,7 +367,7 @@ async def playlist_upload(metadata, user):
                 {
                     'title': metadata['title'],
                     'artist': metadata.get('artist', 'Various Artists'),
-                    'provider': metadata.get('provider', 'Apple Music')
+                    'provider': metadata.get('provider', '--')
                 }
             )
             
@@ -394,7 +400,7 @@ async def playlist_upload(metadata, user):
             {
                 'title': metadata['title'],
                 'artist': metadata.get('artist', 'Various Artists'),
-                'provider': metadata.get('provider', 'Apple Music'),
+                'provider': metadata.get('provider', '--'),
                 'r_link': rclone_link
             }
         )
