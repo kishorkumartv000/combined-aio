@@ -158,10 +158,10 @@ The Tidal NG provider is highly configurable directly from the bot's settings me
     -   **Token Swap**: For advanced users, this allows you to replace your authentication token by uploading a new `token.json` file. This is useful for sharing sessions or using an account without going through the interactive login.
     -   **Import Settings**: This allows you to upload your own `settings.json` file to be used as the base configuration, instead of the tool's default. The bot will still apply your in-bot choices on top of this custom base file.
 
--   **Download Path**: The download location is also managed automatically, but can be customized.
-    -   **Default Behavior**: By default, each download is saved to a unique directory: `<DOWNLOAD_BASE_DIR>/<user_id>/<task_id>/`.
-    -   **Optional Override**: For advanced users, you can set a global download path via the `.env` file:
-        -   `TIDAL_NG_DOWNLOAD_PATH`: If set, all Tidal NG downloads will be saved to this directory.
+-   **Download Path**: The download location is determined by a 3-level priority system:
+    1.  **Environment Variable (Highest Priority)**: If you set `TIDAL_NG_DOWNLOAD_PATH` in your `.env` file, it will be used for all downloads, overriding all other settings.
+    2.  **Imported Settings File**: If the environment variable is not set, the bot checks the `settings.json` you may have imported. If the `download_base_path` in that file is set to a custom value, the bot will respect it.
+    3.  **Bot Default (Lowest Priority)**: If neither of the above are set, the bot will create a unique directory for each task: `<DOWNLOAD_BASE_DIR>/<user_id>/<task_id>/`.
 
 ## Apple Wrapper Controls (Apple Music)
 
