@@ -18,56 +18,44 @@ import json
 
 
 @Client.on_message(filters.document & filters.private)
-async def handle_file_swap(c: Client, msg: Message):
+async def handle_tidal_ng_file_upload(c: Client, msg: Message):
     user_id = msg.from_user.id
     state = await conversation_state.get(user_id)
 
-    if not state:
+    if not state or state.get('name') != "awaiting_tidal_ng_file":
         return
 
-    state_name = state.get('name')
-    if state_name not in ["awaiting_token_file", "awaiting_settings_file"]:
+    if not msg.document:
         return
 
-    # --- Configuration based on state ---
-    if state_name == "awaiting_token_file":
-        expected_filename = "token.json"
-        target_dir = "/root/.config/tidal_dl_ng-dev/"
-        success_msg = "✅ Token Swap Successful!"
-        invalid_json_msg = "❌ **Invalid JSON:** The uploaded file is not a valid `token.json`."
-    else: # awaiting_settings_file
-        expected_filename = "settings.json"
-        target_dir = "/root/.config/tidal_dl_ng/"
-        success_msg = "✅ Settings Import Successful!"
-        invalid_json_msg = "❌ **Invalid JSON:** The uploaded file is not a valid `settings.json`."
+    target_dir = "/root/.config/tidal_dl_ng-dev/"
+    original_filename = msg.document.file_name
+    target_path = os.path.join(target_dir, original_filename)
 
-    target_path = os.path.join(target_dir, expected_filename)
-
-    # --- Logic ---
-    if not msg.document or msg.document.file_name != expected_filename:
-        await c.send_message(user_id, f"❌ **Invalid File:** Please upload a file named `{expected_filename}`.")
-        await conversation_state.clear(user_id)
-        return
-
-    progress_msg = await c.send_message(user_id, f"Downloading and validating `{expected_filename}`...")
+    progress_msg = await c.send_message(user_id, f"Importing `{original_filename}`...")
     temp_path = None
     try:
+        # Download to a temporary path first
         temp_path = await msg.download_media()
-        with open(temp_path, 'r') as f:
-            json.load(f)
 
+        # Ensure the target directory exists (it should, but double-check)
         os.makedirs(target_dir, exist_ok=True)
+
+        # Move the file to the final destination
         os.replace(temp_path, target_path)
 
-        await edit_message(progress_msg, success_msg)
+        # Set permissions
+        os.chmod(target_path, 0o666)
 
-    except json.JSONDecodeError:
-        await edit_message(progress_msg, invalid_json_msg)
+        await edit_message(progress_msg, f"✅ **Import Successful!**\nFile `{original_filename}` has been saved.")
+
     except Exception as e:
         await edit_message(progress_msg, f"❌ **An Error Occurred:**\n`{str(e)}`")
     finally:
+        # Clean up temporary file if it still exists
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
+        # Clear the user's state
         await conversation_state.clear(user_id)
 
 
@@ -463,8 +451,7 @@ async def tidal_ng_cb(c, cb: CallbackQuery):
                 InlineKeyboardButton("🚨 Logout", callback_data="tidalNgLogout")
             ],
             [
-                InlineKeyboardButton("🔄 Token Swap", callback_data="tidalNg_tokenSwap"),
-                InlineKeyboardButton("🔄 Import Settings", callback_data="tidalNg_settingsSwap")
+                InlineKeyboardButton("📂 Import File", callback_data="tidalNg_importFile")
             ],
             [InlineKeyboardButton("🔙 Back", callback_data="providerPanel")]
         ]
@@ -476,27 +463,59 @@ async def tidal_ng_cb(c, cb: CallbackQuery):
         )
 
 # --- Conversation Handlers ---
-@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_tokenSwap$"))
-async def tidal_ng_token_swap_cb(c, cb: CallbackQuery):
-    if await check_user(cb.from_user.id, restricted=True):
-        await conversation_state.clear(cb.from_user.id)
-        await conversation_state.start(cb.from_user.id, "awaiting_token_file", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_importFile$"))
+async def tidal_ng_import_file_cb(c, cb: CallbackQuery):
+    if not await check_user(cb.from_user.id, restricted=True):
+        return
+
+    target_dir = "/root/.config/tidal_dl_ng-dev/"
+
+    if not os.path.exists(target_dir):
         await edit_message(
             cb.message,
-            "Please upload your `token.json` file now.\n\nThis will replace your current token. You can /cancel anytime.",
-            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]])
+            "The destination directory (`/root/.config/tidal_dl_ng-dev/`) does not exist. Shall I create it for you?",
+            InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Yes, create it", callback_data="tidalNg_createDir")],
+                [InlineKeyboardButton("❌ Cancel", callback_data="tidalNgP")]
+            ])
         )
 
-@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_settingsSwap$"))
-async def tidal_ng_settings_swap_cb(c, cb: CallbackQuery):
-    if await check_user(cb.from_user.id, restricted=True):
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_createDir$"))
+async def tidal_ng_create_dir_cb(c, cb: CallbackQuery):
+    if not await check_user(cb.from_user.id, restricted=True):
+        return
+
+    target_dir = "/root/.config/tidal_dl_ng-dev/"
+    try:
+        os.makedirs(target_dir, mode=0o777, exist_ok=True)
+        await cb.answer("Directory created successfully!", show_alert=False)
+        # Now ask for the file
         await conversation_state.clear(cb.from_user.id)
-        await conversation_state.start(cb.from_user.id, "awaiting_settings_file", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
+        await conversation_state.start(cb.from_user.id, "awaiting_tidal_ng_file", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
         await edit_message(
             cb.message,
-            "Please upload your `settings.json` file now.\n\nThis will replace your current base settings. You can /cancel anytime.",
+            "Please upload the file you want to import. You can /cancel anytime.",
+            InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Cancel", callback_data="tidalNgP")]
+            ])
+        )
+    except Exception as e:
+        await edit_message(
+            cb.message,
+            f"❌ **Failed to create directory:**\n`{str(e)}`",
             InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]])
         )
+    else:
+        await conversation_state.clear(cb.from_user.id)
+        await conversation_state.start(cb.from_user.id, "awaiting_tidal_ng_file", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
+        await edit_message(
+            cb.message,
+            "Please upload the file you want to import. You can /cancel anytime.",
+            InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Cancel", callback_data="tidalNgP")]
+            ])
+        )
+
 
 # --- Audio Settings ---
 @Client.on_callback_query(filters.regex(pattern=r"^tidalNg_audio$"))
