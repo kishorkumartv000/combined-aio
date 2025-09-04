@@ -12,6 +12,62 @@ from ..helpers.database.pg_impl import set_db
 from ..helpers.tidal.tidal_api import tidalapi
 
 from ..helpers.message import edit_message, check_user
+from ..helpers.state import conversation_state
+import os
+import json
+
+
+@Client.on_message(filters.document & filters.private)
+async def handle_token_swap(c: Client, msg: Message):
+    user_id = msg.from_user.id
+    state = await conversation_state.get(user_id)
+
+    if not state or state['name'] != "awaiting_token_file":
+        return
+
+    # User is in the correct state, proceed with token swap
+    original_msg_id = state['data']['msg_id']
+    original_chat_id = state['data']['chat_id']
+
+    if not msg.document or msg.document.file_name != "token.json":
+        await c.send_message(user_id, "❌ **Invalid File:** Please upload a file named `token.json`.")
+        await conversation_state.clear(user_id)
+        return
+
+    # Define paths
+    TIDAL_DL_NG_DEV_DIR = "/root/.config/tidal_dl_ng-dev/"
+    TOKEN_FILE_PATH = os.path.join(TIDAL_DL_NG_DEV_DIR, "token.json")
+
+    try:
+        # Show progress
+        progress_msg = await c.send_message(user_id, "Downloading and validating token...")
+
+        # Download to a temporary path first
+        temp_path = await msg.download_media()
+
+        # Validate JSON format
+        with open(temp_path, 'r') as f:
+            json.load(f)
+
+        # Create target directory if it doesn't exist
+        os.makedirs(TIDAL_DL_NG_DEV_DIR, exist_ok=True)
+
+        # Move the file to the final destination
+        os.replace(temp_path, TOKEN_FILE_PATH)
+
+        await edit_message(progress_msg, "✅ **Token Swap Successful!**\n\nYour new Tidal token has been applied.")
+
+    except json.JSONDecodeError:
+        await edit_message(progress_msg, "❌ **Invalid JSON:** The uploaded file is not a valid `token.json`.")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+    except Exception as e:
+        await edit_message(progress_msg, f"❌ **An Error Occurred:**\n`{str(e)}`")
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.remove(temp_path)
+    finally:
+        # Clean up state regardless of outcome
+        await conversation_state.clear(user_id)
 
 
 @Client.on_callback_query(filters.regex(pattern=r"^providerPanel"))
@@ -405,6 +461,9 @@ async def tidal_ng_cb(c, cb: CallbackQuery):
                 InlineKeyboardButton("🔑 Login", callback_data="tidalNgLogin"),
                 InlineKeyboardButton("🚨 Logout", callback_data="tidalNgLogout")
             ],
+            [
+                InlineKeyboardButton("🔄 Token Swap", callback_data="tidalNg_tokenSwap")
+            ],
             [InlineKeyboardButton("🔙 Back", callback_data="providerPanel")]
         ]
         await edit_message(
@@ -412,6 +471,19 @@ async def tidal_ng_cb(c, cb: CallbackQuery):
             "**Tidal NG Settings**\n\n"
             "Configure your download settings for the Tidal NG provider.",
             InlineKeyboardMarkup(buttons)
+        )
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalNg_tokenSwap$"))
+async def tidal_ng_token_swap_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from ..helpers.state import conversation_state
+        await conversation_state.clear(cb.from_user.id)
+        await conversation_state.start(cb.from_user.id, "awaiting_token_file", {"chat_id": cb.message.chat.id, "msg_id": cb.message.id})
+        await edit_message(
+            cb.message,
+            "Please upload your `token.json` file now.\n\n"
+            "This will replace your current token. You can cancel by sending /cancel.",
+            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="tidalNgP")]])
         )
 
 # --- Audio Settings ---
