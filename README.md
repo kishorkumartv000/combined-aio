@@ -172,13 +172,23 @@ This method is robust, clean, and allows the bot to leverage the full feature se
 
 The Tidal NG provider is highly configurable directly from the bot's settings menu.
 
--   **Accessing Settings**: Navigate to `/settings` -> `Provider Settings` -> `Tidal NG`.
--   **Available Settings**:
-    -   **Audio Quality**: Choose your preferred audio quality (`LOW`, `HIGH`, `LOSSLESS`, `HI_RES_LOSSLESS`). Your choice is saved per-user.
-    -   **Embed Lyrics**: Toggle whether lyrics are embedded into the audio file's metadata.
-    -   **Login/Logout**: Manage your `tidal-dl-ng` session.
+-   **Accessing Settings**: Navigate to `/settings` -> `Provider Settings` -> `Tidal NG`. This will open the main settings panel, which is organized into the following sub-menus.
 
--   **Download Path**: The download location is managed automatically, but can be customized.
+-   **Available Settings**:
+    -   **Audio Settings**:
+        -   `Audio Quality`: Choose your preferred audio quality (`LOW`, `HIGH`, `LOSSLESS`, `HI_RES_LOSSLESS`).
+        -   `Replay Gain`: Toggle whether to write replay gain information to metadata.
+    -   **Metadata Settings**:
+        -   `Embed Lyrics`: Toggle embedding lyrics into the audio file.
+        -   `Save Lyrics File`: Toggle saving lyrics to a separate `.lrc` file.
+        -   `Cover Art Dimension`: Choose the resolution for embedded cover art (`320px`, `640px`, `1280px`).
+    -   **File Settings**:
+        -   `Create .m3u8 Playlist`: Toggle the creation of a `.m3u8` playlist file for albums and playlists.
+    -   **Video Settings**:
+        -   `Video Quality`: Choose your preferred video download quality (`360p`, `480p`, `720p`, `1080p`).
+    -   **Login/Logout**: Manage your `tidal-dl-ng` session from the main panel.
+
+-   **Download Path**: The download location is also managed automatically, but can be customized.
     -   **Default Behavior**: By default, each download is saved to a unique directory: `<DOWNLOAD_BASE_DIR>/<user_id>/<task_id>/`.
     -   **Optional Override**: For advanced users, you can set a global download path via the `.env` file:
         -   `TIDAL_NG_DOWNLOAD_PATH`: If set, all Tidal NG downloads will be saved to this directory.

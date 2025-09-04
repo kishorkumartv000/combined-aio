@@ -75,19 +75,33 @@ async def start_tidal_ng(link: str, user: dict):
         new_settings = original_settings.copy()
         new_settings['download_base_path'] = download_path
 
-        # Apply user-specific settings from the database
+        # Helper to apply a user setting if it exists
+        def apply_user_setting(settings_dict, user_id, db_key, json_key, is_bool=False, is_int=False):
+            value_str = user_set_db.get_user_setting(user_id, db_key)
+            if value_str is not None:
+                value = value_str
+                if is_bool:
+                    value = value_str == 'True'
+                elif is_int:
+                    try:
+                        value = int(value_str)
+                    except ValueError:
+                        LOGGER.warning(f"Could not convert {db_key} value '{value_str}' to int for user {user_id}")
+                        return
+
+                settings_dict[json_key] = value
+                LOGGER.info(f"Applying user setting for {user_id}: {json_key} = {value}")
+
+        # Apply all user-specific settings from the database
         user_id = user.get('user_id')
         if user_id:
-            user_quality = user_set_db.get_user_setting(user_id, 'tidal_ng_quality')
-            if user_quality:
-                new_settings['quality_audio'] = user_quality
-                LOGGER.info(f"Applying user quality for {user_id}: {user_quality}")
-
-            user_lyrics_str = user_set_db.get_user_setting(user_id, 'tidal_ng_lyrics')
-            if user_lyrics_str is not None:
-                user_lyrics_bool = user_lyrics_str == 'True'
-                new_settings['lyrics_embed'] = user_lyrics_bool
-                LOGGER.info(f"Applying user lyrics setting for {user_id}: {user_lyrics_bool}")
+            apply_user_setting(new_settings, user_id, 'tidal_ng_quality', 'quality_audio')
+            apply_user_setting(new_settings, user_id, 'tidal_ng_lyrics', 'lyrics_embed', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_replay_gain', 'metadata_replay_gain', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_lyrics_file', 'lyrics_file', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_playlist_create', 'playlist_create', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_cover_dim', 'metadata_cover_dimension', is_int=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_video_quality', 'quality_video')
 
         # Write the modified settings
         with open(TIDAL_DL_NG_SETTINGS_PATH, 'w') as f:
