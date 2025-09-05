@@ -18,23 +18,16 @@ TIDAL_DL_NG_CLI_PATH = "/usr/src/app/tidal-dl-ng/tidal_dl_ng/cli.py"
 # Define the path to the settings.json for the CLI tool
 TIDAL_DL_NG_SETTINGS_PATH = "/root/.config/tidal_dl_ng/settings.json"
 
-async def log_progress(stream, bot_msg, user):
+async def log_stderr(stream, bot_msg, user):
     """
-    Reads a stream (stdout/stderr) from the subprocess and updates the Telegram message.
+    Reads stderr from the subprocess and logs it.
     """
     while True:
         line = await stream.readline()
         if not line:
             break
-
         output = line.decode('utf-8').strip()
-        LOGGER.info(f"[TidalDL-NG] {output}")
-
-        if output:
-            try:
-                await edit_message(bot_msg, f"```\n{output}\n```")
-            except Exception:
-                pass
+        LOGGER.info(f"[TidalDL-NG-STDERR] {output}")
 
 def get_content_id_from_url(url: str) -> str:
     """Extracts the content ID from a Tidal URL."""
@@ -66,153 +59,126 @@ async def start_tidal_ng(link: str, user: dict, options: dict = None):
         with open(TIDAL_DL_NG_SETTINGS_PATH, 'r') as f:
             original_settings = json.load(f)
 
-        # --- Determine Download Path ---
-        task_specific_path = os.path.join(Config.DOWNLOAD_BASE_DIR, str(user.get('user_id')), user.get('task_id'))
-        if Config.TIDAL_NG_DOWNLOAD_PATH:
-            final_download_path = Config.TIDAL_NG_DOWNLOAD_PATH
-        elif original_settings.get('download_base_path') and original_settings['download_base_path'] != '~/download':
-            final_download_path = original_settings['download_base_path']
-        else:
-            final_download_path = task_specific_path
-            is_temp_path = True
-
-        os.makedirs(final_download_path, exist_ok=True)
-
-        # --- Apply Settings ---
-        new_settings = original_settings.copy()
-        new_settings['download_base_path'] = final_download_path
-
-        def apply_user_setting(settings_dict, user_id, db_key, json_key, is_bool=False, is_int=False):
-            value_str = user_set_db.get_user_setting(user_id, db_key)
-            if value_str is not None:
-                value = value_str
-                if is_bool: value = value_str == 'True'
-                elif is_int:
-                    try: value = int(value_str)
-                    except ValueError: return
-                settings_dict[json_key] = value
-                LOGGER.info(f"Applying user setting for {user_id}: {json_key} = {value}")
-
-        user_id = user.get('user_id')
-        if user_id:
-            # Apply all settings...
-            apply_user_setting(new_settings, user_id, 'tidal_ng_quality', 'quality_audio')
-            apply_user_setting(new_settings, user_id, 'tidal_ng_lyrics', 'lyrics_embed', is_bool=True)
-            apply_user_setting(new_settings, user_id, 'tidal_ng_replay_gain', 'metadata_replay_gain', is_bool=True)
-            apply_user_setting(new_settings, user_id, 'tidal_ng_lyrics_file', 'lyrics_file', is_bool=True)
-            apply_user_setting(new_settings, user_id, 'tidal_ng_playlist_create', 'playlist_create', is_bool=True)
-            apply_user_setting(new_settings, user_id, 'tidal_ng_cover_dim', 'metadata_cover_dimension', is_int=True)
-            apply_user_setting(new_settings, user_id, 'tidal_ng_video_quality', 'quality_video')
-            apply_user_setting(new_settings, user_id, 'tidal_ng_symlink', 'symlink_to_track', is_bool=True)
-            apply_user_setting(new_settings, user_id, 'tidal_ng_video_convert', 'video_convert_mp4', is_bool=True)
-            apply_user_setting(new_settings, user_id, 'tidal_ng_video_download', 'video_download', is_bool=True)
-
-        with open(TIDAL_DL_NG_SETTINGS_PATH, 'w') as f:
-            json.dump(new_settings, f, indent=4)
-
         # --- Execute Download ---
         await edit_message(bot_msg, "🚀 Starting Tidal NG download...")
-        cmd = ["python", TIDAL_DL_NG_CLI_PATH, "dl", link]
-        process = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        await asyncio.gather(log_progress(process.stdout, bot_msg, user), log_progress(process.stderr, bot_msg, user))
-        await process.wait()
+        cmd = ["python", TIDAL_DL_NG_CLI_PATH, "dl", link, "--output-json"]
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
 
-        # --- DIAGNOSTIC LOGGING ---
-        LOGGER.info(f"Tidal-NG: Download process finished. Checking for files in path: {final_download_path}")
-        try:
-            ls_proc = await asyncio.create_subprocess_shell(
-                f"ls -lR '{final_download_path}'",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await ls_proc.communicate()
-            LOGGER.info(f"Tidal-NG: Directory listing for '{final_download_path}':\n{stdout.decode().strip()}")
-            if stderr:
-                LOGGER.error(f"Tidal-NG: Error listing directory: {stderr.decode().strip()}")
-        except Exception as ls_err:
-            LOGGER.error(f"Tidal-NG: Failed to list directory contents: {ls_err}")
-        # --- END DIAGNOSTIC LOGGING ---
+        # Log stderr in real-time, capture stdout for JSON parsing
+        stderr_task = asyncio.create_task(log_stderr(process.stderr, bot_msg, user))
+        stdout, _ = await process.communicate()
+        await stderr_task
 
         if process.returncode != 0:
-            raise Exception("Tidal-NG download process failed.")
+            raise Exception("Tidal-NG download process failed. Check logs for details.")
 
         # --- Process and Upload ---
         await edit_message(bot_msg, "📥 Download complete. Processing files...")
 
-        downloaded_files = []
-        for root, _, files in os.walk(final_download_path):
-            for file in files:
-                downloaded_files.append(os.path.join(root, file))
+        try:
+            output_json = json.loads(stdout)
+        except json.JSONDecodeError:
+            raise Exception("Failed to parse JSON output from tidal-dl-ng. No file paths found.")
 
-        if not downloaded_files:
-            raise Exception("No files were downloaded.")
+        # The output can be a dict (track/video) or a list of dicts (album/playlist)
+        if isinstance(output_json, dict):
+            items_data = [output_json]
+        elif isinstance(output_json, list):
+            items_data = output_json
+        else:
+            raise Exception(f"Unexpected JSON output format: {type(output_json)}")
 
-        items = []
-        for file_path in downloaded_files:
+        if not items_data:
+            raise Exception("No files were downloaded (JSON output was empty).")
+
+        downloaded_items = []
+        paths_to_clean = set()
+
+        for item_data in items_data:
+            file_path = item_data.get('path')
+            if not file_path or not os.path.exists(file_path):
+                LOGGER.error(f"File path not found in JSON or does not exist: {file_path}")
+                continue
+
             try:
                 if file_path.lower().endswith(('.mp4', '.m4v')):
                     metadata = await extract_video_metadata(file_path)
                 else:
                     metadata = await extract_audio_metadata(file_path)
+
                 metadata['filepath'] = file_path
                 metadata['provider'] = 'Tidal NG'
-                items.append(metadata)
+                downloaded_items.append(metadata)
+
+                # Add the parent directory to the cleanup set
+                paths_to_clean.add(os.path.dirname(file_path))
+
             except Exception as e:
                 LOGGER.error(f"Metadata extraction failed for {file_path}: {str(e)}")
 
-        if not items:
+        if not downloaded_items:
             raise Exception("Metadata extraction failed for all downloaded files.")
 
         # Determine content type
-        content_type = "track" # Default
-        if len(items) > 1:
-            if any(item.get('album') for item in items) and len(set(item.get('album') for item in items)) == 1:
+        content_type = "track"
+        if len(downloaded_items) > 1:
+            # Check if all items belong to the same album
+            album_titles = {item.get('album') for item in downloaded_items if item.get('album')}
+            if len(album_titles) == 1:
                 content_type = "album"
             else:
                 content_type = "playlist"
-        elif items[0]['filepath'].lower().endswith(('.mp4', '.m4v')):
+        elif downloaded_items[0]['filepath'].lower().endswith(('.mp4', '.m4v')):
             content_type = "video"
 
-        # Prepare metadata for uploader functions
+        # For albums/playlists, we need a common folder path for the uploader
+        # We can use the parent of the first file's parent dir, assuming a structure like .../Artist/Album/track.flac
+        common_folder_path = os.path.dirname(os.path.dirname(downloaded_items[0]['filepath'])) if len(paths_to_clean) > 1 else list(paths_to_clean)[0]
+
         upload_meta = {
-            'success': True, 'type': content_type, 'items': items,
-            'folderpath': final_download_path, 'provider': 'Tidal NG',
-            'title': items[0].get('album') if content_type == 'album' else items[0].get('title'),
-            'artist': items[0].get('artist'), 'poster_msg': bot_msg
+            'success': True, 'type': content_type, 'items': downloaded_items,
+            'folderpath': common_folder_path, 'provider': 'Tidal NG',
+            'title': downloaded_items[0].get('album') if content_type == 'album' else downloaded_items[0].get('title'),
+            'artist': downloaded_items[0].get('artist'), 'poster_msg': bot_msg
         }
 
         # Record in history
+        user_id = user.get('user_id')
         content_id = get_content_id_from_url(link)
+        # We can't get quality from settings anymore, so let's just put N/A
         download_history.record_download(
             user_id=user_id, provider='Tidal NG', content_type=content_type,
             content_id=content_id, title=upload_meta['title'],
-            artist=upload_meta['artist'], quality=new_settings.get('quality_audio', 'N/A')
+            artist=upload_meta['artist'], quality='N/A'
         )
 
         # Call the appropriate uploader
         if content_type == 'track':
-            await track_upload(items[0], user)
+            await track_upload(downloaded_items[0], user)
         elif content_type == 'video':
-            await music_video_upload(items[0], user)
+            await music_video_upload(downloaded_items[0], user)
         elif content_type == 'album':
             await album_upload(upload_meta, user)
         elif content_type == 'playlist':
             await playlist_upload(upload_meta, user)
 
-        # If a temporary, task-specific directory was used, clean it up.
-        # For albums/playlists, the uploader already deleted the folder.
-        # For single tracks/videos, the uploader only deleted the file, so we delete the folder here.
-        if is_temp_path and content_type in ['track', 'video']:
-            if os.path.exists(final_download_path):
-                LOGGER.info(f"Tidal NG: Cleaning up temporary task folder: {final_download_path}")
-                shutil.rmtree(final_download_path, ignore_errors=True)
+        # Cleanup: The uploader functions might delete the folder already.
+        # This is a fallback to clean any parent directories left behind.
+        # We iterate over a copy as the uploader might modify the underlying folders.
+        for path in list(paths_to_clean):
+            # The uploader for album/playlist should have already deleted this.
+            # This is mainly for single tracks/videos or if the uploader fails.
+            if os.path.exists(path):
+                LOGGER.info(f"Tidal NG: Cleaning up downloaded content directory: {path}")
+                shutil.rmtree(path, ignore_errors=True)
 
     except Exception as e:
         LOGGER.error(f"An error occurred in start_tidal_ng: {e}", exc_info=True)
         await edit_message(bot_msg, f"❌ **Fatal Error:** An unexpected error occurred: {e}")
-        # Final cleanup attempt only on temporary directories
-        if is_temp_path and final_download_path and os.path.exists(final_download_path):
-            shutil.rmtree(final_download_path, ignore_errors=True)
 
     finally:
         if original_settings:
