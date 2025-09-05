@@ -43,28 +43,23 @@ async def rclone_panel_cb(client, cb:CallbackQuery):
 # Simple in-memory flag to accept next document as rclone.conf
 _import_waiting = set()
 
-# Custom filter to check if a user is in the rclone import state
-async def is_awaiting_rclone_conf_filter(_, __, message: Message):
-    return message.from_user and message.from_user.id in _import_waiting
-
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneImport"))
 async def rclone_import_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         _import_waiting.add(cb.from_user.id)
         await edit_message(cb.message, "Please send your rclone.conf as a document now.")
 
-# Apply the custom filter to the handler
-@Client.on_message(filters.document & filters.private & filters.create(is_awaiting_rclone_conf_filter))
+@Client.on_message(filters.document)
 async def handle_rclone_conf_upload(client, message: Message):
     try:
-        user_id = message.from_user.id
-        # The state check is now handled by the filter, so we can remove it from here.
+        user_id = message.from_user.id if message.from_user else None
+        if user_id not in _import_waiting:
+            return
         if not message.document:
             return
         # Only accept a file named rclone.conf or any .conf
         filename = (message.document.file_name or '').lower()
         if 'rclone' not in filename and not filename.endswith('.conf'):
-            await send_message(message, "⚠️ Please send a valid `rclone.conf` file.")
             return
         # Download to a temp path and move to ./rclone.conf
         temp_path = await client.download_media(message, file_name='rclone.conf.tmp')
@@ -74,9 +69,9 @@ async def handle_rclone_conf_upload(client, message: Message):
         os.replace(temp_path, 'rclone.conf')
         _import_waiting.discard(user_id)
         await send_message(message, "✅ rclone.conf imported successfully.")
-    except Exception as e:
+    except Exception:
         try:
-            await send_message(message, f"❌ Failed to import rclone.conf: {e}")
+            await send_message(message, "❌ Failed to import rclone.conf.")
         except Exception:
             pass
 
