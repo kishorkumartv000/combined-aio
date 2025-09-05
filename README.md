@@ -162,10 +162,7 @@ The Tidal NG provider is highly configurable directly from the bot's settings me
             -   **`dev config (tidal_dl_ng-dev)`**: Saves the file to `/root/.config/tidal_dl_ng-dev/`. This can be used for development or testing purposes.
         -   **Note:** If the chosen directory does not exist, the bot will ask for your permission to create it before proceeding. This feature provides a quick way to manage or update any custom configuration files for the `tidal-dl-ng` tool.
 
--   **Download Path**: The download location is determined by a 3-level priority system:
-    1.  **Environment Variable (Highest Priority)**: If you set `TIDAL_NG_DOWNLOAD_PATH` in your `.env` file, it will be used for all downloads, overriding all other settings.
-    2.  **Imported Settings File**: If the environment variable is not set, the bot checks the `settings.json` you may have imported. If the `download_base_path` in that file is set to a custom value, the bot will respect it.
-    3.  **Bot Default (Lowest Priority)**: If neither of the above are set, the bot will create a unique directory for each task: `<DOWNLOAD_BASE_DIR>/<user_id>/<task_id>/`.
+-   **Download Path**: To improve reliability, the download path is now managed automatically by the `tidal-dl-ng` tool itself. The bot no longer controls the initial download location. Instead, it asks the tool where the files were saved and processes them from there. All downloaded files are automatically cleaned up after being processed and uploaded.
 
 ## Apple Wrapper Controls (Apple Music)
 

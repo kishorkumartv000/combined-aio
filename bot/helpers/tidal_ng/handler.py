@@ -40,8 +40,6 @@ async def start_tidal_ng(link: str, user: dict, options: dict = None):
     """
     bot_msg = user.get('bot_msg')
     original_settings = None
-    final_download_path = None
-    is_temp_path = False
 
     try:
         # --- One-time setup & Initial Read ---
@@ -58,6 +56,38 @@ async def start_tidal_ng(link: str, user: dict, options: dict = None):
 
         with open(TIDAL_DL_NG_SETTINGS_PATH, 'r') as f:
             original_settings = json.load(f)
+
+        # --- Apply Settings ---
+        new_settings = original_settings.copy()
+        # We no longer set download_base_path, but we still apply all other user settings.
+
+        def apply_user_setting(settings_dict, user_id, db_key, json_key, is_bool=False, is_int=False):
+            value_str = user_set_db.get_user_setting(user_id, db_key)
+            if value_str is not None:
+                value = value_str
+                if is_bool: value = value_str == 'True'
+                elif is_int:
+                    try: value = int(value_str)
+                    except ValueError: return
+                settings_dict[json_key] = value
+                LOGGER.info(f"Applying user setting for {user_id}: {json_key} = {value}")
+
+        user_id = user.get('user_id')
+        if user_id:
+            # Apply all settings...
+            apply_user_setting(new_settings, user_id, 'tidal_ng_quality', 'quality_audio')
+            apply_user_setting(new_settings, user_id, 'tidal_ng_lyrics', 'lyrics_embed', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_replay_gain', 'metadata_replay_gain', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_lyrics_file', 'lyrics_file', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_playlist_create', 'playlist_create', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_cover_dim', 'metadata_cover_dimension', is_int=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_video_quality', 'quality_video')
+            apply_user_setting(new_settings, user_id, 'tidal_ng_symlink', 'symlink_to_track', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_video_convert', 'video_convert_mp4', is_bool=True)
+            apply_user_setting(new_settings, user_id, 'tidal_ng_video_download', 'video_download', is_bool=True)
+
+        with open(TIDAL_DL_NG_SETTINGS_PATH, 'w') as f:
+            json.dump(new_settings, f, indent=4)
 
         # --- Execute Download ---
         await edit_message(bot_msg, "🚀 Starting Tidal NG download...")
@@ -98,6 +128,8 @@ async def start_tidal_ng(link: str, user: dict, options: dict = None):
         downloaded_items = []
         paths_to_clean = set()
 
+        common_folder_path = None
+
         for item_data in items_data:
             file_path = item_data.get('path')
             if not file_path or not os.path.exists(file_path):
@@ -114,11 +146,23 @@ async def start_tidal_ng(link: str, user: dict, options: dict = None):
                 metadata['provider'] = 'Tidal NG'
                 downloaded_items.append(metadata)
 
-                # Add the parent directory to the cleanup set
-                paths_to_clean.add(os.path.dirname(file_path))
+                # The top-level folder created by the tool is what we need to clean up.
+                # e.g., /downloads/ArtistName/
+                # The file path might be /downloads/ArtistName/AlbumName/Track.flac
+                # We need to find the common ancestor directory to delete.
+                if common_folder_path is None:
+                    common_folder_path = file_path
+                else:
+                    common_folder_path = os.path.commonpath([common_folder_path, file_path])
 
             except Exception as e:
                 LOGGER.error(f"Metadata extraction failed for {file_path}: {str(e)}")
+
+        if common_folder_path and os.path.isdir(common_folder_path):
+             paths_to_clean.add(common_folder_path)
+        elif common_folder_path and os.path.isfile(common_folder_path):
+             paths_to_clean.add(os.path.dirname(common_folder_path))
+
 
         if not downloaded_items:
             raise Exception("Metadata extraction failed for all downloaded files.")
@@ -126,7 +170,6 @@ async def start_tidal_ng(link: str, user: dict, options: dict = None):
         # Determine content type
         content_type = "track"
         if len(downloaded_items) > 1:
-            # Check if all items belong to the same album
             album_titles = {item.get('album') for item in downloaded_items if item.get('album')}
             if len(album_titles) == 1:
                 content_type = "album"
@@ -135,25 +178,20 @@ async def start_tidal_ng(link: str, user: dict, options: dict = None):
         elif downloaded_items[0]['filepath'].lower().endswith(('.mp4', '.m4v')):
             content_type = "video"
 
-        # For albums/playlists, we need a common folder path for the uploader
-        # We can use the parent of the first file's parent dir, assuming a structure like .../Artist/Album/track.flac
-        common_folder_path = os.path.dirname(os.path.dirname(downloaded_items[0]['filepath'])) if len(paths_to_clean) > 1 else list(paths_to_clean)[0]
-
         upload_meta = {
             'success': True, 'type': content_type, 'items': downloaded_items,
-            'folderpath': common_folder_path, 'provider': 'Tidal NG',
+            'folderpath': common_folder_path if content_type in ['album', 'playlist'] else os.path.dirname(downloaded_items[0]['filepath']),
+            'provider': 'Tidal NG',
             'title': downloaded_items[0].get('album') if content_type == 'album' else downloaded_items[0].get('title'),
             'artist': downloaded_items[0].get('artist'), 'poster_msg': bot_msg
         }
 
         # Record in history
-        user_id = user.get('user_id')
         content_id = get_content_id_from_url(link)
-        # We can't get quality from settings anymore, so let's just put N/A
         download_history.record_download(
             user_id=user_id, provider='Tidal NG', content_type=content_type,
             content_id=content_id, title=upload_meta['title'],
-            artist=upload_meta['artist'], quality='N/A'
+            artist=upload_meta['artist'], quality=new_settings.get('quality_audio', 'N/A')
         )
 
         # Call the appropriate uploader
@@ -166,14 +204,11 @@ async def start_tidal_ng(link: str, user: dict, options: dict = None):
         elif content_type == 'playlist':
             await playlist_upload(upload_meta, user)
 
-        # Cleanup: The uploader functions might delete the folder already.
-        # This is a fallback to clean any parent directories left behind.
-        # We iterate over a copy as the uploader might modify the underlying folders.
+        # The uploader functions should handle cleanup of their respective folders.
+        # This is a final fallback cleanup.
         for path in list(paths_to_clean):
-            # The uploader for album/playlist should have already deleted this.
-            # This is mainly for single tracks/videos or if the uploader fails.
             if os.path.exists(path):
-                LOGGER.info(f"Tidal NG: Cleaning up downloaded content directory: {path}")
+                LOGGER.info(f"Tidal NG: Cleaning up downloaded content parent directory: {path}")
                 shutil.rmtree(path, ignore_errors=True)
 
     except Exception as e:
