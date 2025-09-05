@@ -22,6 +22,7 @@ async def is_awaiting_tidal_ng_file_filter(_, __, message: Message):
     if not message.from_user:
         return False
     state = await conversation_state.get(message.from_user.id)
+    # Correctly check for 'stage' instead of 'name'
     return state and state.get('stage') == "awaiting_tidal_ng_file"
 
 # Apply the custom filter and set a high priority group (-1) to run before the default handlers
@@ -29,7 +30,7 @@ async def is_awaiting_tidal_ng_file_filter(_, __, message: Message):
 async def handle_tidal_ng_config_upload(c: Client, msg: Message):
     user_id = msg.from_user.id
     state = await conversation_state.get(user_id)
-    # The state check is now handled by the filter, so we can remove it from here.
+    # The state check is now handled by the filter.
 
     if not msg.document:
         return
@@ -46,6 +47,7 @@ async def handle_tidal_ng_config_upload(c: Client, msg: Message):
     progress_msg = await c.send_message(user_id, f"Importing `{original_filename}`...")
     temp_path = None
     try:
+        # Correctly call download_media on the client object `c`
         temp_path = await c.download_media(msg)
         os.makedirs(target_dir, exist_ok=True)
         os.replace(temp_path, target_path)
